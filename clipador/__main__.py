@@ -8,6 +8,8 @@
                                               # grava uma live por N minutos e processa (teste real)
   python -m clipador status                   # contadores do banco e últimos clipes
   python -m clipador review [--port 8787]     # só a fila de aprovação web (celular na rede local)
+  python -m clipador publish status|list|run  # publicação (agenda, redes configuradas, publicar vencidos)
+  python -m clipador publish auth youtube     # autoriza a conta do YouTube (idem tiktok)
   python -m clipador healthcheck              # ffmpeg, NVENC, CUDA, navegador, disco
 """
 from __future__ import annotations
@@ -220,6 +222,74 @@ def cmd_review(args, cfg) -> int:
     return 0
 
 
+def cmd_publish(args, cfg) -> int:
+    """Publicação: status das redes, agenda, publicar vencidos/um post, autorizar YouTube/TikTok, métricas."""
+    from clipador.publish.scheduler import Scheduler
+
+    db = _db(cfg)
+    sch = Scheduler(cfg, db)
+    sub = args.publish_cmd
+    if sub == "status":
+        s = sch.status_summary()
+        print(f"modo: {s['mode']}  janelas: {', '.join(s['windows'])}")
+        for net, i in s["networks"].items():
+            print(f"  {net:10s} {'manual' if i['manual'] else 'API   '}  {'OK' if i['configured'] else 'FALTA'}  {i['detail']}")
+        print("posts:", json.dumps(s["posts"]))
+        return 0
+    if sub == "list":
+        rows = db.posts(status=args.status or "scheduled,posting,failed,processing", limit=100)
+        if not rows:
+            print("nenhum post nesse status"); return 0
+        for p in rows:
+            when = time.strftime("%d/%m %H:%M", time.localtime(p["scheduled_at"])) if p["scheduled_at"] else "   --   "
+            print(f"  #{p['id']:4d} {p['platform']:9s} {p['status']:10s} {when}  clipe {p['clip_id']:3d} nota {p['score'] or 0:3.0f}  "
+                  f"{(p['title'] or '')[:40]:40s} {p['url'] or p['error'] or ''}")
+        return 0
+    if sub == "schedule":
+        ids = sch.schedule_clip(args.clip, asap=args.now)
+        print(f"posts criados: {ids}")
+        return 0
+    if sub == "run":
+        if cfg.settings.get("publish.mode") != "auto" and not args.force:
+            print("publish.mode é manual: nada a publicar por API (use --force para publicar mesmo assim)"); return 0
+        res = sch.run_due()
+        print(json.dumps(res, ensure_ascii=False, indent=1) if res else "nenhum post vencido")
+        return 0
+    if sub == "now":
+        post = db.get_post(args.post)
+        if not post:
+            print("post não existe"); return 2
+        db.update("posts", args.post, status="scheduled", scheduled_at=time.time())
+        pub = sch.publishers.get(post["platform"])
+        if pub is None:
+            print(f"rede {post['platform']} não habilitada"); return 2
+        print(json.dumps(sch.publish_post(args.post, pub, force=False), ensure_ascii=False))
+        return 0
+    if sub == "auth":
+        tokens_dir = cfg.settings.path("data_dir") / "tokens"
+        nets = cfg.settings.get("publish.networks", {})
+        if args.network == "youtube":
+            from clipador.publish.youtube import YouTubePublisher
+
+            tok = YouTubePublisher(nets.get("youtube", {}), cfg.settings.section("publish"), tokens_dir).auth_flow()
+        elif args.network == "tiktok":
+            from clipador.publish.tiktok import TikTokPublisher
+
+            tok = TikTokPublisher(nets.get("tiktok", {}), cfg.settings.section("publish"), tokens_dir).auth_flow()
+        else:
+            print("auth disponível para: youtube, tiktok (Instagram usa token de longa duração gerado no painel da Meta)"); return 2
+        print(f"\nOK: token salvo em {tokens_dir / (args.network + '.json')} (não vai para o git). "
+              f"Se quiser, copie também para o .env: {args.network.upper()}_REFRESH_TOKEN={tok[:6]}...")
+        return 0
+    if sub == "metrics":
+        n = sch.refresh_metrics(max_age_hours=0)
+        print(f"métricas atualizadas em {n} post(s)")
+        for p in db.posts(status="posted,processing", limit=30):
+            print(f"  #{p['id']:4d} {p['platform']:9s} {p['url'] or p['remote_id'] or '':50s} {p['metrics_json'] or ''}")
+        return 0
+    return 2
+
+
 def cmd_status(args, cfg) -> int:
     db = _db(cfg)
     print("Tabelas:", json.dumps(db.stats()))
@@ -323,6 +393,15 @@ def main(argv=None) -> int:
     sub.add_parser("status")
     rv = sub.add_parser("review", help="só a fila de aprovação web (sem capturar lives)")
     rv.add_argument("--port", type=int)
+    pb = sub.add_parser("publish", help="publicação: status | list | schedule | run | now | auth | metrics")
+    pbs = pb.add_subparsers(dest="publish_cmd", required=True)
+    pbs.add_parser("status")
+    pl = pbs.add_parser("list"); pl.add_argument("--status", help="ex.: posted ou scheduled,failed ou all")
+    ps = pbs.add_parser("schedule"); ps.add_argument("--clip", type=int, required=True); ps.add_argument("--now", action="store_true")
+    pr = pbs.add_parser("run"); pr.add_argument("--force", action="store_true")
+    pn = pbs.add_parser("now"); pn.add_argument("--post", type=int, required=True)
+    pa = pbs.add_parser("auth"); pa.add_argument("network", choices=["youtube", "tiktok"])
+    pbs.add_parser("metrics")
     h = sub.add_parser("healthcheck")
     h.add_argument("--whisper", action="store_true", help="também carrega o Whisper na GPU")
     args = p.parse_args(argv)
@@ -330,7 +409,7 @@ def main(argv=None) -> int:
     cfg = load_config()
     setup_logging(cfg.settings.path("logs_dir"), logging.DEBUG if args.verbose else logging.INFO)
     return {"run": cmd_run, "check": cmd_check, "process-file": cmd_process_file, "record": cmd_record,
-            "status": cmd_status, "review": cmd_review, "healthcheck": cmd_healthcheck}[args.cmd](args, cfg)
+            "status": cmd_status, "review": cmd_review, "publish": cmd_publish, "healthcheck": cmd_healthcheck}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

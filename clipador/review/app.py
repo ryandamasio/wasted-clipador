@@ -29,8 +29,8 @@ log = logging.getLogger("review.app")
 TEMPLATES = Path(__file__).parent / "templates"
 
 
-def create_app(cfg: Config, db: Database) -> FastAPI:
-    svc = ReviewService(cfg, db)
+def create_app(cfg: Config, db: Database, scheduler=None) -> FastAPI:
+    svc = ReviewService(cfg, db, scheduler)
     env = Environment(loader=FileSystemLoader(str(TEMPLATES)), autoescape=True)
     app = FastAPI(title="Clipador — fila de aprovação", docs_url=None, redoc_url=None)
     app.state.service = svc
@@ -85,6 +85,15 @@ def create_app(cfg: Config, db: Database) -> FastAPI:
         body = await _json(request)
         return svc.mark_posted(clip_id, body.get("platforms"))
 
+    @app.get("/api/posts")
+    def api_posts(status: str = "scheduled,posting,failed,processing", limit: int = 200):
+        return {"posts": svc.list_posts(status, min(max(limit, 1), 500)), "publish": svc.publish_status(), "stats": svc.stats()}
+
+    @app.post("/api/posts/{post_id}/{action}")
+    async def api_post_action(post_id: int, action: str, request: Request):
+        body = await _json(request)
+        return svc.post_action(post_id, action, body.get("url"))
+
     @app.get("/media/{clip_id}/{name}")
     def media(clip_id: int, name: str):
         if name not in ("clip.mp4", "clip_youtube.mp4", "cover.jpg"):
@@ -111,13 +120,13 @@ async def _json(request: Request) -> dict:
 class ReviewServer:
     """uvicorn numa thread daemon; `stop()` encerra."""
 
-    def __init__(self, cfg: Config, db: Database):
+    def __init__(self, cfg: Config, db: Database, scheduler=None):
         import uvicorn
 
         r = cfg.settings.section("review")
         self.host = str(r.get("host", "0.0.0.0"))
         self.port = int(r.get("port", 8787))
-        self.app = create_app(cfg, db)
+        self.app = create_app(cfg, db, scheduler)
         config = uvicorn.Config(self.app, host=self.host, port=self.port, log_level="warning", access_log=False)
         self.server = uvicorn.Server(config)
         self.thread = threading.Thread(target=self.server.run, name="review-web", daemon=True)

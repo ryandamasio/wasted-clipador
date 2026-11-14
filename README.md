@@ -63,10 +63,33 @@ licença entra sozinha na descrição do YouTube. Em TikTok/Reels adicione o som
 Facecam: meça a região da câmera num print da live e preencha em fração da tela, ex.
 `facecam: {x: 0.72, y: 0.02, w: 0.26, h: 0.30}` (canto superior direito, 26% de largura, 30% de altura).
 
+### Publicação e agenda (Fase 3)
+Ao aprovar um clipe, o agendador cria um post por rede habilitada dentro das janelas de `publish.windows`,
+respeitando limite diário (com rampa de aquecimento para conta nova), espaçamento mínimo e defasagem entre
+redes (nunca o mesmo vídeo em todas as redes no mesmo minuto). A aba **Agenda** da fila mostra o que postar e quando.
+
+- `publish.mode: manual` (padrão): você posta pelo app da rede no horário sugerido, copia o texto na Agenda e toca
+  em "Já postei". Nada sai sem você.
+- `publish.mode: auto`: as redes com `via: api` publicam sozinhas (YouTube Data API, TikTok Content Posting API,
+  Instagram Graph API com upload resumível) e `via: upload-post` usa o serviço Upload-Post com uma chave só.
+  Credenciais só no `.env` (veja `.env.example`); tokens renovados ficam em `data/tokens/`. Retry com backoff;
+  erros definitivos (credencial, vídeo rejeitado) não repetem. Kwai não tem API pública: fica manual.
+```bash
+.venv/Scripts/python -m clipador publish status            # redes configuradas, janelas, contadores
+.venv/Scripts/python -m clipador publish auth youtube      # autoriza a conta (abre o navegador); idem tiktok
+.venv/Scripts/python -m clipador publish list              # agenda
+.venv/Scripts/python -m clipador publish run               # publica o que venceu (modo auto; `run` já faz isso sozinho)
+.venv/Scripts/python -m clipador publish metrics           # views/likes dos posts via API
+```
+Limites a lembrar: YouTube gasta 1600 de 10.000 unidades de quota por upload (6/dia); TikTok só publica em
+modo privado até o app passar pela auditoria; Instagram exige conta profissional ligada a uma Página.
+
 ## Status
 - **Fase 1 (MVP):** implementada e calibrada. Testes: `pytest -q tests`.
 - **Fase 2:** fila de aprovação web, zoom dinâmico, layout facecam, música livre, retenção de rejeitados: implementada.
-- Fases 3-4 (postagem automática, plano B OBS, métricas): ver `CLAUDE.md`.
+- **Fase 3:** agendador anti-spam, publishers (YouTube/TikTok/Instagram/Upload-Post/manual), retries, métricas: implementada
+  (APIs testadas com HTTP simulado; falta rodar com contas reais quando existirem).
+- Fase 4 (plano B OBS, métricas em painel, documentação final): ver `CLAUDE.md`.
 
 ## Remover um clipe/streamer (pedido do streamer)
 Coloque `enabled: false` no `streamers.yaml` e apague a pasta do clipe em `data/output`. Nada é publicado sem você.

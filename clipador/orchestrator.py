@@ -41,6 +41,7 @@ class Orchestrator:
         self.detector: Detector | None = None
         self.renderer: Renderer | None = None
         self.review_server = None
+        self._scheduler = None
         self.paused_for_disk = False
 
     # ------------------------------------------------------------- lifecycle
@@ -55,6 +56,7 @@ class Orchestrator:
             threading.Thread(target=self._guard(self.detect_loop), name="detect", daemon=True),
             threading.Thread(target=self._guard(self.edit_loop), name="edit", daemon=True),
             threading.Thread(target=self._guard(self.retention_loop), name="retention", daemon=True),
+            threading.Thread(target=self._guard(self.publish_loop), name="publish", daemon=True),
         ]
         for t in threads:
             t.start()
@@ -66,14 +68,38 @@ class Orchestrator:
         finally:
             self.stop()
 
+    @property
+    def scheduler(self):
+        if self._scheduler is None:
+            from clipador.publish.scheduler import Scheduler
+
+            self._scheduler = Scheduler(self.cfg, self.db)
+        return self._scheduler
+
     def start_review_server(self) -> None:
         try:
             from clipador.review.app import ReviewServer
 
-            self.review_server = ReviewServer(self.cfg, self.db)
+            self.review_server = ReviewServer(self.cfg, self.db, self.scheduler)
             self.review_server.start()
         except Exception:  # noqa: BLE001
             log.exception("fila de aprovação não subiu (o resto continua)")
+
+    # --------------------------------------------------------------- publish
+    def publish_loop(self) -> None:
+        """Publica posts vencidos (modo auto) e atualiza métricas de vez em quando."""
+        poll = float(self.cfg.settings.get("publish.publish_poll_seconds", 60))
+        last_metrics = 0.0
+        while not self.stop_event.is_set():
+            try:
+                if self.cfg.settings.get("publish.mode", "manual") == "auto":
+                    self.scheduler.run_due()
+                    if time.time() - last_metrics > 3600:
+                        self.scheduler.refresh_metrics()
+                        last_metrics = time.time()
+            except Exception:  # noqa: BLE001
+                log.exception("ciclo de publicação falhou")
+            self.stop_event.wait(poll)
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -255,6 +281,10 @@ class Orchestrator:
             self.db.add_review({"id": clip_id, "moment_id": m["id"]}, "auto", f"nota >= {auto_min}",
                                chosen_title=copy_data["titles"][0], moment=m)
             log.info("clipe #%d auto-aprovado (nota %.0f >= %s)", clip_id, m["score"], auto_min)
+            try:
+                self.scheduler.schedule_clip(clip_id)
+            except Exception:  # noqa: BLE001
+                log.exception("agendamento do clipe %d falhou", clip_id)
         return True
 
     # ------------------------------------------------------------- retention

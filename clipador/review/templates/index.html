@@ -56,6 +56,22 @@
   .links a { color:var(--acc); text-decoration:none; }
   .stats { font-size:12px; color:var(--mut); padding:6px 12px 14px; text-align:center; }
   .badge { font-size:11px; padding:1px 7px; border-radius:7px; background:var(--line); color:var(--mut); }
+  .post { display:grid; grid-template-columns:72px 1fr; gap:10px; padding:12px; }
+  .post img { width:72px; height:128px; object-fit:cover; border-radius:8px; background:#000; }
+  .post .ph { width:72px; height:128px; border-radius:8px; background:#000; }
+  .post h3 { margin:0 0 4px; font-size:14px; }
+  .post .when { font-size:13px; color:var(--mut); }
+  .post .when.due { color:var(--warn); font-weight:600; }
+  .net-tag { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:7px; color:#000; margin-right:6px; }
+  .net-youtube { background:#ff4d4d; } .net-tiktok { background:#69f0e0; } .net-instagram { background:#f5a3ff; } .net-kwai { background:#ffb15c; }
+  .post .cap { margin-top:6px; font-size:12px; color:var(--mut); max-height:3.6em; overflow:hidden; white-space:pre-wrap; }
+  .post .err { color:var(--no); font-size:12px; margin-top:4px; }
+  .pacts { grid-column:1 / -1; display:flex; gap:8px; flex-wrap:wrap; }
+  .pacts button { padding:9px 12px; font-size:13px; }
+  .banner { margin:0 0 12px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font-size:13px; color:var(--mut); }
+  .urlrow { grid-column:1 / -1; display:none; gap:8px; }
+  .urlrow.on { display:flex; }
+  .urlrow input { flex:1; }
 </style>
 </head>
 <body>
@@ -65,6 +81,7 @@
     <button data-s="ready" class="on">Pendentes<b id="n-ready">0</b></button>
     <button data-s="approved">Aprovados<b id="n-approved">0</b></button>
     <button data-s="rejected">Rejeitados<b id="n-rejected">0</b></button>
+    <button data-s="agenda">Agenda<b id="n-agenda">0</b></button>
     <button data-s="posted">Postados<b id="n-posted">0</b></button>
     <button data-s="all">Todos</button>
   </div>
@@ -91,15 +108,64 @@ async function api(path, body) {
 
 async function load() {
   try {
+    if (status === "agenda") {
+      const j = await api(`/api/posts`);
+      posts = j.posts; publishInfo = j.publish; renderPosts(); renderStats(j.stats); return;
+    }
     const j = await api(`/api/clips?status=${status}`);
     clips = j.clips; render(); renderStats(j.stats);
   } catch (e) { $("#list").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 
+let posts = [], publishInfo = {};
+const NET_NAMES = { youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", kwai: "Kwai" };
+
+function postCard(p) {
+  const manual = p.publisher === "manual";
+  const acts = [];
+  if (p.status === "scheduled" || p.status === "posting") {
+    if (manual) acts.push(`<button class="ok" data-p="posted">✓ Já postei</button>`);
+    else acts.push(`<button class="ok" data-p="now">🚀 Postar agora</button>`);
+    acts.push(`<button class="ghost" data-p="reschedule">⏱ Reagendar</button>`, `<button class="ghost" data-p="skip">Pular</button>`);
+  } else if (p.status === "failed") {
+    acts.push(`<button class="ok" data-p="retry">↻ Tentar de novo</button>`, `<button class="ghost" data-p="posted">Marcar postado</button>`, `<button class="ghost" data-p="skip">Pular</button>`);
+  } else if (p.status === "processing") {
+    acts.push(`<span class="badge">processando na plataforma…</span>`);
+  }
+  return `<article class="card post-card" data-pid="${p.id}"><div class="post">
+    ${p.has_cover ? `<img src="/media/${p.clip_id}/cover.jpg" alt="">` : `<div class="ph"></div>`}
+    <div>
+      <div><span class="net-tag net-${p.platform}">${NET_NAMES[p.platform] || p.platform}</span><span class="badge">${manual ? "manual" : p.publisher}</span> <span class="badge">nota ${p.score}</span></div>
+      <h3>${esc(p.title)}</h3>
+      <div class="when ${p.due ? "due" : ""}">${p.due ? "⏰ agora: " : ""}${esc(p.when)} · ${esc(p.streamer_name)}${p.attempts > 1 ? ` · tentativa ${p.attempts}` : ""}</div>
+      <div class="cap">${esc(p.caption)}</div>
+      ${p.error ? `<div class="err">${esc(p.error)}</div>` : ""}
+      ${p.url ? `<div><a href="${esc(p.url)}" target="_blank" style="color:var(--acc);font-size:13px">${esc(p.url)}</a></div>` : ""}
+    </div>
+    <div class="pacts">
+      <button class="ghost" data-p="copy">📋 copiar texto</button>
+      <a href="/media/${p.clip_id}/${p.video_name}" download><button class="ghost">⬇ vídeo</button></a>
+      ${acts.join("")}
+    </div>
+    <div class="urlrow"><input type="text" class="purl" placeholder="link do post (opcional)"><button class="ok" data-p="posted-go">Confirmar</button></div>
+  </div></article>`;
+}
+
+function renderPosts() {
+  const el = $("#list");
+  const mode = publishInfo.mode === "auto" ? "automático" : "manual";
+  const nets = Object.entries(publishInfo.networks || {}).map(([n, i]) => `${NET_NAMES[n] || n}: ${i.manual ? "manual" : (i.configured ? "API ok" : "API não configurada")}`).join(" · ");
+  const banner = `<div class="banner">Modo <b>${mode}</b> · ${esc(nets)}<br>Janelas: ${(publishInfo.windows || []).join(", ")}. ${mode === "manual" ? "Poste pelo app da rede no horário sugerido e toque em \"Já postei\"." : "Redes manuais ainda dependem de você."}</div>`;
+  if (!posts.length) { el.innerHTML = banner + `<div class="empty">Nada agendado. Aprove clipes para entrar na agenda.</div>`; return; }
+  el.innerHTML = banner + posts.map(postCard).join("");
+}
+
 function renderStats(st) {
   const c = st.counts || {};
   for (const k of ["ready", "approved", "rejected", "posted"]) $("#n-" + k).textContent = c[k] || 0;
-  $("#pend").textContent = st.pending_moments ? `${st.pending_moments} renderizando…` : "";
+  const ps = st.posts || {};
+  $("#n-agenda").textContent = (ps.scheduled || 0) + (ps.failed || 0) + (ps.posting || 0);
+  $("#pend").textContent = [st.pending_moments ? `${st.pending_moments} renderizando…` : "", st.posts_due ? `${st.posts_due} post(s) na hora` : ""].filter(Boolean).join(" · ");
   const rows = (st.by_score || []).map(b => `${b.band}: ${b.approved}✓ ${b.rejected}✗ ${b.recut}✂`).join(" · ");
   $("#stats").textContent = rows ? "decisões por nota — " + rows : "";
 }
@@ -169,6 +235,25 @@ function removeCard(art, msg) {
 $("#list").addEventListener("click", async ev => {
   const btn = ev.target.closest("button"); if (!btn) return;
   const art = btn.closest(".card"); const id = art.dataset.id;
+  if (btn.dataset.p) {
+    const pid = art.dataset.pid; const p = posts.find(x => x.id == pid); const act = btn.dataset.p;
+    if (act === "copy") {
+      try { await navigator.clipboard.writeText(p.title + "\n\n" + p.caption); toast("texto copiado"); } catch { toast("não deu para copiar (precisa de HTTPS/localhost)"); }
+      return;
+    }
+    if (act === "posted") { $(".urlrow", art).classList.toggle("on"); return; }
+    if (busy) return;
+    busy = true; btn.disabled = true;
+    try {
+      const body = act === "posted-go" ? { url: $(".purl", art).value.trim() || null } : {};
+      const r = await api(`/api/posts/${pid}/${act === "posted-go" ? "posted" : act}`, body);
+      const msg = { "posted-go": "✓ marcado como postado", now: r.post && r.post.url ? "🚀 publicado: " + r.post.url : (r.post && r.post.error ? "erro: " + r.post.error : "🚀 enviado"), skip: "pulado", retry: "↻ reagendado para já", reschedule: "⏱ reagendado" }[act];
+      toast(msg, 3500);
+      await load();
+    } catch (e) { toast("erro: " + e.message, 4000); btn.disabled = false; }
+    finally { busy = false; }
+    return;
+  }
   if (btn.dataset.copy) {
     const n = art.querySelector(`.net[data-net="${btn.dataset.copy}"]`);
     const txt = $(".nt", n).value + "\n\n" + $(".nd", n).value;

@@ -26,9 +26,18 @@ class ReviewError(Exception):
 
 
 class ReviewService:
-    def __init__(self, cfg: Config, db: Database):
+    def __init__(self, cfg: Config, db: Database, scheduler=None):
         self.cfg = cfg
         self.db = db
+        self._scheduler = scheduler
+
+    @property
+    def scheduler(self):
+        if self._scheduler is None:
+            from clipador.publish.scheduler import Scheduler
+
+            self._scheduler = Scheduler(self.cfg, self.db)
+        return self._scheduler
 
     # ------------------------------------------------------------------ leitura
     def list_clips(self, status: str = "ready", limit: int = 100) -> list[dict]:
@@ -108,6 +117,10 @@ class ReviewService:
                        copy_json=json.dumps(copy_data, ensure_ascii=False), review_note=note, reviewed_at=time.time())
         self.db.add_review(clip, "approved", note, chosen_title=title, moment=moment)
         log.info("clipe %d APROVADO: %s", clip_id, title)
+        try:
+            self.scheduler.schedule_clip(clip_id)
+        except Exception:  # noqa: BLE001
+            log.exception("agendamento do clipe %d falhou (aprovação mantida)", clip_id)
         return self.get(clip_id)
 
     def reject(self, clip_id: int, reason: str | None = None) -> dict:
@@ -117,6 +130,7 @@ class ReviewService:
         self.db.set_clip_status(clip_id, "rejected", reason)
         self.db.update("moments", clip["moment_id"], status="rejected")
         self.db.add_review(clip, "rejected", reason)
+        self.scheduler.cancel_clip(clip_id, "clipe rejeitado")
         log.info("clipe %d rejeitado (%s)", clip_id, reason or "sem motivo")
         return self.get(clip_id)
 
@@ -129,16 +143,79 @@ class ReviewService:
         self.db.set_clip_status(clip_id, "ready", None)
         self.db.update("moments", clip["moment_id"], status="clipped")
         self.db.add_review(clip, "restored")
+        self.scheduler.cancel_clip(clip_id, "clipe voltou para a fila")
         return self.get(clip_id)
 
     def mark_posted(self, clip_id: int, platforms: list[str] | None = None) -> dict:
+        """Dono postou à mão: marca os posts agendados do clipe (ou cria registros) como postados."""
         clip = self.db.get_clip(clip_id)
         if not clip:
             raise ReviewError("clipe não existe")
-        self.db.set_clip_status(clip_id, "posted", ",".join(platforms or []) or None)
-        for p in platforms or ["manual"]:
-            self.db.insert("posts", clip_id=clip_id, platform=p, status="manual", posted_at=time.time())
+        now = time.time()
+        existing = {p["platform"]: p for p in self.db.posts_for_clip(clip_id)}
+        wanted = platforms or [p for p in existing] or ["manual"]
+        for p in wanted:
+            if p in existing and existing[p]["status"] in ("scheduled", "failed", "skipped", "posting"):
+                self.db.update("posts", existing[p]["id"], status="posted", posted_at=now, error=None)
+            elif p not in existing:
+                self.db.insert("posts", clip_id=clip_id, platform=p, status="posted", posted_at=now, publisher="manual",
+                               attempts=0, created_at=now)
+        self.db.set_clip_status(clip_id, "posted", ",".join(wanted))
         return self.get(clip_id)
+
+    # ------------------------------------------------------------------ agenda de posts
+    def list_posts(self, status: str = "scheduled,posting,failed,processing", limit: int = 200) -> list[dict]:
+        out = []
+        for p in self.db.posts(status=status, limit=limit):
+            copy_data = {}
+            clip = self.db.get_clip(p["clip_id"])
+            if clip and clip.get("copy_json"):
+                copy_data = json.loads(clip["copy_json"])
+            net = copy_data.get("networks", {}).get(p["platform"], {})
+            s = self.cfg.streamer(p["streamer"])
+            out.append({
+                "id": p["id"], "clip_id": p["clip_id"], "platform": p["platform"], "status": p["status"], "publisher": p.get("publisher") or "manual",
+                "scheduled_at": p.get("scheduled_at"), "posted_at": p.get("posted_at"),
+                "when": time.strftime("%a %d/%m %H:%M", time.localtime(p["scheduled_at"])) if p.get("scheduled_at") else "",
+                "due": bool(p.get("scheduled_at") and p["scheduled_at"] <= time.time() and p["status"] == "scheduled"),
+                "title": p.get("title") or "", "caption": p.get("caption") or net.get("description") or "",
+                "hashtags": net.get("hashtags", []), "url": p.get("url"), "error": p.get("error"), "attempts": p.get("attempts") or 0,
+                "streamer_name": s.name if s else p["streamer"], "score": round(float(p.get("score") or 0)),
+                "has_cover": bool(p.get("cover_path")) and Path(p["cover_path"]).exists(),
+                "video_name": "clip_youtube.mp4" if p["platform"] == "youtube" and p.get("music_path") and Path(p["music_path"]).exists() else "clip.mp4",
+                "metrics": json.loads(p["metrics_json"]) if p.get("metrics_json") else None,
+            })
+        return out
+
+    def post_action(self, post_id: int, action: str, url: str | None = None) -> dict:
+        post = self.db.get_post(post_id)
+        if not post:
+            raise ReviewError("post não existe")
+        if action == "posted":        # dono postou à mão
+            self.db.update("posts", post_id, status="posted", posted_at=time.time(), url=url or post.get("url"), error=None)
+            self.scheduler._maybe_mark_clip_posted(post["clip_id"])
+        elif action == "skip":
+            self.db.update("posts", post_id, status="skipped", error="pulado pelo dono")
+        elif action == "now":         # publica agora (auto) ou adianta para já (manual)
+            pub = self.scheduler.publishers.get(post["platform"])
+            if pub is None or pub.manual:
+                self.db.update("posts", post_id, status="scheduled", scheduled_at=time.time())
+            else:
+                self.db.update("posts", post_id, status="scheduled", scheduled_at=time.time())
+                return {"post": self.scheduler.publish_post(post_id, pub)}
+        elif action == "retry":
+            self.db.update("posts", post_id, status="scheduled", scheduled_at=time.time(), attempts=0, error=None)
+        elif action == "reschedule":
+            when = self.scheduler.next_slot(post["platform"], time.time() + 600)
+            if when is None:
+                raise ReviewError("sem vaga nas janelas")
+            self.db.update("posts", post_id, status="scheduled", scheduled_at=when, error=None)
+        else:
+            raise ReviewError(f"ação desconhecida: {action}")
+        return {"post": self.db.get_post(post_id)}
+
+    def publish_status(self) -> dict:
+        return self.scheduler.status_summary()
 
     def recut(self, clip_id: int, start_delta: float = 0.0, end_delta: float = 0.0, reedit: bool = False) -> dict:
         """Move início/fim (segundos; negativo = antes) e manda o momento de volta para a fila de edição.
@@ -189,5 +266,8 @@ class ReviewService:
         return removed
 
     def stats(self) -> dict:
+        posts = self.db.post_counts()
+        due = len(self.db.due_posts(time.time()))
         return {"counts": self.db.clip_counts(), "by_score": self.db.review_stats(),
-                "pending_moments": len(self.db.pending_moments())}
+                "pending_moments": len(self.db.pending_moments()), "posts": posts, "posts_due": due,
+                "publish_mode": self.cfg.settings.get("publish.mode", "manual")}

@@ -4,8 +4,8 @@
     {
       "name": "review",
       "runtimeExecutable": ".venv/Scripts/python",
-      "runtimeArgs": ["-m", "clipador", "review"],
-      "port": 8787
+      "runtimeArgs": ["-m", "clipador", "review", "--port", "8789"],
+      "port": 8789
     }
   ]
 }

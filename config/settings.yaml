@@ -169,5 +169,21 @@ review:
   purge_after_hours: 72            # apaga a pasta de saída de clipes rejeitados/substituídos após X h (null = nunca)
 
 publish:
-  mode: manual                     # manual | auto (Fase 3)
-  posts_per_day: 3
+  mode: manual                     # manual: a fila só agenda e você posta pelo app | auto: publica via API nas redes com `via`
+  windows: ["11:30-13:30", "17:30-19:30", "20:30-23:00"]   # janelas de postagem (hora local do PC)
+  posts_per_day: 3                 # por rede, depois do aquecimento
+  max_posts_per_day: 5
+  warmup_ramp: [2, 2, 2, 3, 3, 3, 4]   # posts/dia nos primeiros dias de cada rede (conta nova); depois posts_per_day
+  min_gap_minutes: 90              # espaçamento mínimo entre posts da mesma rede
+  cross_network_offset_minutes: [8, 35]   # mesmo clipe em redes diferentes: defasagem aleatória nesse intervalo
+  jitter_minutes: [3, 12]          # atraso aleatório mínimo após a aprovação
+  max_clip_age_hours: 36           # só informa no log quando a vaga ficar mais longe que isso
+  retry_backoff_minutes: [5, 20, 60, 180]   # tentativas após falha (erros definitivos não repetem)
+  publish_poll_seconds: 60
+  networks:                        # via: api (API oficial) | upload-post (serviço único) | manual
+    youtube:   {enabled: true, via: api, privacy: public, category_id: "20", made_for_kids: false, set_thumbnail: false}
+    tiktok:    {enabled: true, via: api, privacy_level: SELF_ONLY, disable_duet: false, disable_stitch: false, disable_comment: false}
+    instagram: {enabled: true, via: api, share_to_feed: true}
+    kwai:      {enabled: true, via: manual}
+  upload_post:
+    user: ""                       # nome do perfil no painel do Upload-Post (se usar via: upload-post)

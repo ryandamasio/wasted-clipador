@@ -45,10 +45,21 @@ copy/      generator.py (3 títulos, descrição e hashtags por rede via templat
 review/    service.py (ReviewService: list/approve/reject/recut/reedit/restore/mark_posted/purge_old; grava `reviews`),
            app.py (FastAPI + ReviewServer em thread; /api/clips, /media/{id}/{clip.mp4|clip_youtube.mp4|cover.jpg}),
            templates/index.html (página única responsiva, JS puro)
-orchestrator.py  threads monitor/detect/edit/retention + ReviewServer; recover() após queda; 1 Whisper e 1 encode
-           por vez; auto-aprovação por nota (review.auto_approve_min_score); MediaNotReady com live encerrada -> failed
-__main__.py      CLI (run, check, process-file, record, status, review, healthcheck)
+publish/   base.py (Publisher, PostPayload, PublishResult, PublishError(retryable), TokenStore em data/tokens,
+           set_transport p/ testes), scheduler.py (parse_windows, build_publishers por publish.networks.<rede>.via,
+           Scheduler: daily_limit c/ warmup_ramp, next_slot, schedule_clip c/ jitter+defasagem entre redes,
+           run_due/publish_post c/ retry backoff, refresh_metrics, status_summary), manual.py, youtube.py (OAuth
+           refresh + upload resumível + auth_flow loopback), tiktok.py (creator_info, init FILE_UPLOAD, chunks,
+           status fetch, rotação de refresh token), instagram.py (container REELS upload_type=resumable ->
+           rupload -> status -> media_publish), uploadpost.py (api.upload-post.com, 1 instância por rede)
+orchestrator.py  threads monitor/detect/edit/retention/publish + ReviewServer; recover() após queda; 1 Whisper e 1
+           encode por vez; auto-aprovação por nota (review.auto_approve_min_score) agenda posts; MediaNotReady
+           com live encerrada -> failed
+__main__.py      CLI (run, check, process-file, record, status, review, publish {status,list,schedule,run,now,auth,metrics}, healthcheck)
 ```
+Posts: `scheduled -> posting -> posted` (`processing` quando a plataforma ainda processa; `failed` após esgotar
+retries ou erro definitivo; `skipped` = pulado/cancelado). Rede manual: fica `scheduled` até o dono marcar na Agenda.
+Aprovar agenda (ReviewService.approve -> Scheduler.schedule_clip); rejeitar/restaurar cancela (`skipped`).
 Fluxo de status: segments `recorded -> detecting -> detected -> deleted`; moments `new -> editing -> clipped`
 (`waiting_media` enquanto a live não gravou o fim do clipe; `failed`, `dupe`, `rejected`); clips
 `ready -> approved -> posted` (`rejected`, `superseded` após recorte/re-edição, `purged` após review.purge_after_hours).
@@ -80,8 +91,14 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   re-renderizou em 30 s, aprovação reescreveu post.md. 20 testes passam. Sem faixas em assets/music_free ainda
   (dono precisa baixar e registrar); facecam de todos os streamers ainda null (medir nas lives).
   Contexto: GTA 6 só lança em 19/11, então não há live de GTA 6 para calibrar; usar GTA RP (Coringa) como proxy.
-- Fase 3: publicação automática (`publish/`), agendador anti-spam. Candidatos: Upload-Post API (via OpenShorts),
-  APIs oficiais (YouTube Data v3, Instagram Graph, TikTok Content Posting). Automação do amigo do dono: desconhecida.
+- Fase 3: CONCLUÍDA em 14/11/2026 (sem contas reais ainda). Agendador: janelas 11:30-13:30/17:30-19:30/20:30-23:00,
+  rampa de aquecimento [2,2,2,3,3,3,4] posts/dia por rede, gap 90 min, defasagem 8-35 min entre redes, jitter 3-12 min,
+  backoff 5/20/60/180 min. Publishers testados só com httpx.MockTransport (fluxos completos de YouTube resumable,
+  TikTok init/chunk/status, Instagram resumable, Upload-Post). Modo padrão `manual`: a Agenda na fila web mostra o
+  que postar e o dono marca "Já postei". Validado ao vivo: aprovação criou 4 posts espaçados; "Já postei" pela
+  interface marcou o post. Para ligar o automático: preencher .env, `publish auth youtube|tiktok`, `publish.mode: auto`.
+  Automação do amigo do dono continua desconhecida (se for ferramenta pronta, `via: upload-post` é o caminho rápido).
+  Nota: live do Gaules em 14/11 06:05 gerou clipe real nota 71 em 2 min (áudio+fala+"morri") sem chat no rerun.
 - Fase 4: plano B OBS, 3 lives simultâneas estáveis, auto-aprovação, métricas.
 
 ## Decisões registradas

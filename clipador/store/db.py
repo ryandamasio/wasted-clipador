@@ -115,6 +115,14 @@ MIGRATIONS = [
     ("clips", "chosen_title", "TEXT"),
     ("clips", "render_json", "TEXT"),     # layout, zoom, margem da legenda (variação)
     ("moments", "recut_count", "INTEGER NOT NULL DEFAULT 0"),
+    # Fase 3: publicação
+    ("posts", "title", "TEXT"),
+    ("posts", "caption", "TEXT"),
+    ("posts", "remote_id", "TEXT"),
+    ("posts", "publisher", "TEXT"),       # api | upload-post | manual
+    ("posts", "metrics_json", "TEXT"),
+    ("posts", "metrics_at", "REAL"),
+    ("posts", "created_at", "REAL"),
 ]
 
 
@@ -310,6 +318,53 @@ class Database:
 
     def purgeable_clips(self, older_than_ts: float) -> list[dict]:
         return self.fetchall("SELECT * FROM clips WHERE status IN ('rejected','superseded') AND reviewed_at < ?", [older_than_ts])
+
+    # --- posts (publicação) ----------------------------------------------------
+    def add_post(self, clip_id: int, platform: str, scheduled_at: float | None, title: str, caption: str,
+                 publisher: str, status: str = "scheduled") -> int:
+        return self.insert("posts", clip_id=clip_id, platform=platform, status=status, scheduled_at=scheduled_at,
+                           title=title, caption=caption, publisher=publisher, attempts=0, created_at=time.time())
+
+    def get_post(self, post_id: int) -> dict | None:
+        return self.fetchone("SELECT * FROM posts WHERE id = ?", [post_id])
+
+    def posts_for_clip(self, clip_id: int) -> list[dict]:
+        return self.fetchall("SELECT * FROM posts WHERE clip_id = ? ORDER BY scheduled_at", [clip_id])
+
+    def posts(self, status: str | None = None, platform: str | None = None, limit: int = 200) -> list[dict]:
+        sql = """SELECT p.*, c.path AS clip_path, c.cover_path, c.music_path, c.moment_id, m.score, s.streamer
+                 FROM posts p JOIN clips c ON c.id = p.clip_id JOIN moments m ON m.id = c.moment_id
+                 JOIN streams s ON s.id = m.stream_id"""
+        conds, params = [], []
+        if status and status != "all":
+            conds.append("p.status IN (" + ",".join("?" for _ in status.split(",")) + ")")
+            params += status.split(",")
+        if platform:
+            conds.append("p.platform = ?")
+            params.append(platform)
+        if conds:
+            sql += " WHERE " + " AND ".join(conds)
+        sql += " ORDER BY COALESCE(p.scheduled_at, p.created_at) LIMIT ?"
+        params.append(limit)
+        return self.fetchall(sql, params)
+
+    def due_posts(self, now: float) -> list[dict]:
+        return self.fetchall("SELECT * FROM posts WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ? "
+                             "ORDER BY scheduled_at", [now])
+
+    def platform_posts_between(self, platform: str, start_ts: float, end_ts: float) -> list[dict]:
+        """Posts ativos (agendados/postando/postados) de uma rede num intervalo, para limites diários e espaçamento."""
+        return self.fetchall(
+            "SELECT * FROM posts WHERE platform = ? AND status IN ('scheduled','posting','posted') "
+            "AND COALESCE(posted_at, scheduled_at) >= ? AND COALESCE(posted_at, scheduled_at) < ?", [platform, start_ts, end_ts])
+
+    def first_post_ts(self, platform: str) -> float | None:
+        row = self.fetchone("SELECT MIN(COALESCE(posted_at, scheduled_at)) AS t FROM posts WHERE platform = ? "
+                            "AND status IN ('scheduled','posting','posted')", [platform])
+        return float(row["t"]) if row and row["t"] is not None else None
+
+    def post_counts(self) -> dict[str, int]:
+        return {r["status"]: int(r["n"]) for r in self.fetchall("SELECT status, COUNT(*) AS n FROM posts GROUP BY status")}
 
     # --- manutenção ----------------------------------------------------------
     def stats(self) -> dict:

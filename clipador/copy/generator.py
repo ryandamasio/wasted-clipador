@@ -25,6 +25,17 @@ HOOKS_BY_REASON = {
     "transcript": ["{name}: \"{quote}\"", "\"{quote}\" — {name} no GTA 6"],
 }
 
+KEYWORD_NOUNS = {"policia", "perseguicao", "fuga", "batida", "explosao", "assalto", "roubo", "banco", "helicoptero", "aviao",
+                 "easter egg", "fisica", "estrela", "missao", "corrida", "briga", "cena", "cutscene", "gameplay", "trailer"}
+
+
+def _norm_kw(k: str) -> str:
+    import unicodedata
+
+    k = unicodedata.normalize("NFKD", k.lower())
+    return "".join(c for c in k if not unicodedata.combining(c))
+
+
 DESCRIPTION_TEMPLATE = (
     "{title}\n\n"
     "Clipe de {name} — {link}\n"
@@ -86,7 +97,8 @@ def generate_copy(cfg: Config, streamer: Streamer, moment: dict, llm_title: str 
     reasons = json.loads(moment["reasons"]) if isinstance(moment.get("reasons"), str) else (moment.get("reasons") or {})
     transcript = moment.get("transcript") or ""
     name = streamer.name
-    kw = (reasons.get("keywords_found") or [None])[0]
+    # só substantivos entram no gancho "a {kw} mais insana"; verbos (morreu, bateu...) geram título estranho
+    kw = next((k for k in (reasons.get("keywords_found") or []) if _norm_kw(k) in KEYWORD_NOUNS), None)
     quote = _pick_quote(transcript, rng)
     max_chars = int(cfg.settings.get("copy.title_max_chars", 70))
 
