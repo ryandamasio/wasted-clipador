@@ -69,7 +69,18 @@ def _hashtags(cfg: Config, streamer: Streamer, network: str, rng: random.Random)
     return ["#" + t for t in seen[:limit]]
 
 
-def generate_copy(cfg: Config, streamer: Streamer, moment: dict, llm_title: str | None = None) -> dict:
+def music_note(music: dict | None) -> str:
+    if music:
+        lic = f" — {music['license']}" if music.get("license") else ""
+        att = f"\nAtribuição (cole na descrição do YouTube se a licença exigir): {music['attribution']}" if music.get("attribution") else ""
+        return (f"YouTube: use clip_youtube.mp4 (música livre: {music.get('title') or music['file']}{lic}).{att}\n"
+                "TikTok/Instagram/Kwai: use clip.mp4 (sem música) e adicione o som trending dentro do app na hora de postar.")
+    return ("YouTube: nenhuma faixa em assets/music_free; poste clip.mp4 sem música ou adicione faixas livres (ver LICENSES.md). "
+            "TikTok/Instagram: adicione o som trending dentro do app na hora de postar.")
+
+
+def generate_copy(cfg: Config, streamer: Streamer, moment: dict, llm_title: str | None = None,
+                  music: dict | None = None) -> dict:
     """Retorna dict com titles (3), e por rede: title, description, hashtags."""
     rng = random.Random(moment["id"])
     reasons = json.loads(moment["reasons"]) if isinstance(moment.get("reasons"), str) else (moment.get("reasons") or {})
@@ -110,6 +121,8 @@ def generate_copy(cfg: Config, streamer: Streamer, moment: dict, llm_title: str 
                                            hashtags=" ".join(tags))
         if net == "youtube":
             title_net = f"{title} #shorts"[:100]
+            if music and music.get("attribution"):
+                desc = desc.replace("\n\n#", f"\n\nMúsica: {music['attribution']}\n\n#", 1)
         else:
             title_net = title
         networks[net] = {"title": title_net, "description": desc, "hashtags": tags}
@@ -117,17 +130,19 @@ def generate_copy(cfg: Config, streamer: Streamer, moment: dict, llm_title: str 
         "titles": titles,
         "credit": f"Clipe de {name} — {streamer.channel_link}",
         "networks": networks,
-        "music_note": ("YouTube: use apenas faixas de assets/music_free (livres de direitos). "
-                       "TikTok/Instagram: adicione o som trending dentro do app na hora de postar."),
+        "music": music,
+        "music_note": music_note(music),
     }
 
 
-def write_post_files(out_dir: Path, copy_data: dict, moment: dict, streamer: Streamer, clip_name: str) -> Path:
+def write_post_files(out_dir: Path, copy_data: dict, moment: dict, streamer: Streamer, clip_name: str,
+                     chosen_title: str | None = None) -> Path:
     post_json = out_dir / "post.json"
     post_json.write_text(json.dumps({"moment_id": moment["id"], "score": moment["score"], "streamer": streamer.handle,
-                                     **copy_data}, ensure_ascii=False, indent=2), encoding="utf-8")
+                                     "chosen_title": chosen_title, **copy_data}, ensure_ascii=False, indent=2), encoding="utf-8")
     md = [f"# {clip_name}", "",
           f"**Streamer:** {streamer.name} ({streamer.channel_link})  ",
+          *([f"**Título escolhido:** {chosen_title}  "] if chosen_title else []),
           f"**Nota:** {moment['score']:.0f}/100  ",
           f"**Motivo:** {'; '.join((json.loads(moment['reasons']) if isinstance(moment['reasons'], str) else moment['reasons']).get('notes', []))}  ",
           f"**Transcrição:** {moment.get('transcript') or '(sem fala)'}", "",

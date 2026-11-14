@@ -139,6 +139,21 @@ edit:
     opacity: 0.6
     width: 220
     position: "top-right"          # top-left | top-right
+  zoom:                            # punch-in suave nos picos de áudio (Fase 2)
+    enabled: true
+    amount: 0.12                   # 12% de aproximação no pico
+    width_seconds: 1.2             # meia-largura do zoom (entra e sai em ~2,4 s)
+    max_per_clip: 3
+    min_gap_seconds: 4
+  facecam_max_height: 760          # altura máxima da facecam no layout dividido (px)
+  split_shift_up: 60               # desloca o conjunto facecam+gameplay para cima (deixa a legenda sobre o gameplay)
+  music:                           # só na versão clip_youtube.mp4; clip.mp4 fica sem música (TikTok/Instagram)
+    enabled: true
+    dir: assets/music_free         # faixas livres + LICENSES.md (sem faixas -> sem versão com música)
+    target_lufs: -27               # loudness da música antes do ducking (voz fica em -14: música ~13 dB abaixo)
+    volume_db: 0                   # ajuste fino extra (dB)
+    duck_threshold: 0.03           # sidechain: abaixa a música quando há voz
+    duck_ratio: 6
 
 copy:
   profile_name: "Cortes GTA 6"
@@ -147,9 +162,11 @@ copy:
   title_max_chars: 70
 
 review:
-  host: 0.0.0.0
+  enabled: true                    # sobe a fila de aprovação junto com `clipador run`
+  host: 0.0.0.0                    # acessível na rede local (celular no mesmo Wi-Fi): http://IP-do-PC:8787
   port: 8787
   auto_approve_min_score: null     # ex.: 85 para auto-aprovar; null = desligado
+  purge_after_hours: 72            # apaga a pasta de saída de clipes rejeitados/substituídos após X h (null = nunca)
 
 publish:
   mode: manual                     # manual | auto (Fase 3)

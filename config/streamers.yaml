@@ -4,7 +4,9 @@
 #   priority: 1 = maior prioridade quando há mais lives do que slots
 #   display: como aparece no crédito ("Clipe: @display")
 #   channel_link: link usado na descrição do post
-#   facecam: região da facecam em fração da tela {x, y, w, h} ou null (Fase 2)
+#   facecam: região da facecam em fração da tela {x, y, w, h} ou null. Com região, o clipe sai dividido:
+#            facecam em cima, gameplay embaixo. Ex.: {x: 0.72, y: 0.02, w: 0.26, h: 0.30} (canto sup. direito).
+#            Meça num print da live (x,y = canto superior esquerdo da câmera). Se o streamer mudar o layout, ajuste.
 #   chat_offset_seconds: atraso do vídeo em relação ao chat (ajuste por streamer; null usa o global)
 #
 # Fonte da lista inicial (nov/2026): Streams Charts 2025 (horas assistidas, games BR):

@@ -92,7 +92,30 @@ CREATE TABLE IF NOT EXISTS posts (
     error       TEXT,
     attempts    INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS reviews (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    clip_id     INTEGER NOT NULL REFERENCES clips(id),
+    moment_id   INTEGER NOT NULL REFERENCES moments(id),
+    decision    TEXT NOT NULL,            -- approved | rejected | recut | reedit | auto | restored
+    reason      TEXT,
+    score       REAL,
+    reasons     TEXT,                     -- JSON dos componentes da detecção (para calibrar depois)
+    chosen_title TEXT,
+    start_delta REAL,
+    end_delta   REAL,
+    created_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reviews_clip ON reviews(clip_id);
 """
+
+# colunas adicionadas depois da Fase 1 (ALTER TABLE idempotente)
+MIGRATIONS = [
+    ("clips", "music_path", "TEXT"),
+    ("clips", "chosen_title", "TEXT"),
+    ("clips", "render_json", "TEXT"),     # layout, zoom, margem da legenda (variação)
+    ("moments", "recut_count", "INTEGER NOT NULL DEFAULT 0"),
+]
 
 
 class Database:
@@ -103,6 +126,13 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
         self.conn().executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        for table, col, decl in MIGRATIONS:
+            cols = {r["name"] for r in self.execute(f"PRAGMA table_info({table})").fetchall()}
+            if col not in cols:
+                self.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
 
     def conn(self) -> sqlite3.Connection:
         c = getattr(self._local, "conn", None)
@@ -224,11 +254,14 @@ class Database:
 
     # --- clips -------------------------------------------------------------
     def add_clip(self, moment_id: int, path: Path, cover_path: Path | None, post_path: Path | None,
-                 duration: float, title: str, copy_data: dict) -> int:
+                 duration: float, title: str, copy_data: dict, music_path: Path | None = None,
+                 render_info: dict | None = None) -> int:
         return self.insert("clips", moment_id=moment_id, path=str(path),
                            cover_path=str(cover_path) if cover_path else None,
                            post_path=str(post_path) if post_path else None, duration=duration, title=title,
-                           copy_json=json.dumps(copy_data, ensure_ascii=False), status="ready", created_at=time.time())
+                           copy_json=json.dumps(copy_data, ensure_ascii=False), status="ready", created_at=time.time(),
+                           music_path=str(music_path) if music_path else None,
+                           render_json=json.dumps(render_info or {}, ensure_ascii=False))
 
     def clips(self, status: str | None = None, limit: int = 100) -> list[dict]:
         if status:
@@ -237,6 +270,46 @@ class Database:
 
     def set_clip_status(self, clip_id: int, status: str, note: str | None = None) -> None:
         self.update("clips", clip_id, status=status, review_note=note, reviewed_at=time.time())
+
+    def get_clip(self, clip_id: int) -> dict | None:
+        return self.fetchone("SELECT * FROM clips WHERE id = ?", [clip_id])
+
+    def clips_for_review(self, status: str | None = "ready", limit: int = 100) -> list[dict]:
+        """Clipes com dados do momento e da stream (para a fila de aprovação)."""
+        sql = """SELECT c.*, m.score, m.reasons, m.transcript, m.start_ts, m.end_ts, m.peak_ts, m.stream_id,
+                        m.status AS moment_status, m.recut_count, s.streamer, s.platform, s.title AS stream_title
+                 FROM clips c JOIN moments m ON m.id = c.moment_id JOIN streams s ON s.id = m.stream_id"""
+        params: list = []
+        if status and status != "all":
+            sql += " WHERE c.status = ?"
+            params.append(status)
+        order = "m.score DESC, c.created_at DESC" if status == "ready" else "c.reviewed_at DESC, c.created_at DESC"
+        sql += f" ORDER BY {order} LIMIT ?"
+        params.append(limit)
+        return self.fetchall(sql, params)
+
+    def clip_counts(self) -> dict[str, int]:
+        rows = self.fetchall("SELECT status, COUNT(*) AS n FROM clips GROUP BY status")
+        return {r["status"]: int(r["n"]) for r in rows}
+
+    # --- reviews -----------------------------------------------------------
+    def add_review(self, clip: dict, decision: str, reason: str | None = None, chosen_title: str | None = None,
+                   start_delta: float | None = None, end_delta: float | None = None, moment: dict | None = None) -> int:
+        moment = moment or self.get_moment(clip["moment_id"]) or {}
+        return self.insert("reviews", clip_id=clip["id"], moment_id=clip["moment_id"], decision=decision, reason=reason,
+                           score=moment.get("score"), reasons=moment.get("reasons"), chosen_title=chosen_title,
+                           start_delta=start_delta, end_delta=end_delta, created_at=time.time())
+
+    def review_stats(self) -> list[dict]:
+        """Taxa de aprovação por faixa de nota (para calibrar min_score)."""
+        return self.fetchall(
+            """SELECT CASE WHEN score < 55 THEN '<55' WHEN score < 70 THEN '55-69' WHEN score < 85 THEN '70-84' ELSE '85+' END AS band,
+                      SUM(decision IN ('approved','auto')) AS approved, SUM(decision = 'rejected') AS rejected,
+                      SUM(decision IN ('recut','reedit')) AS recut, COUNT(*) AS total
+               FROM reviews GROUP BY band ORDER BY MIN(score)""")
+
+    def purgeable_clips(self, older_than_ts: float) -> list[dict]:
+        return self.fetchall("SELECT * FROM clips WHERE status IN ('rejected','superseded') AND reviewed_at < ?", [older_than_ts])
 
     # --- manutenção ----------------------------------------------------------
     def stats(self) -> dict:

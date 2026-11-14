@@ -7,6 +7,7 @@
   python -m clipador record URL --streamer HANDLE --minutes 10
                                               # grava uma live por N minutos e processa (teste real)
   python -m clipador status                   # contadores do banco e últimos clipes
+  python -m clipador review [--port 8787]     # só a fila de aprovação web (celular na rede local)
   python -m clipador healthcheck              # ffmpeg, NVENC, CUDA, navegador, disco
 """
 from __future__ import annotations
@@ -176,9 +177,60 @@ def cmd_record(args, cfg) -> int:
     return 0
 
 
+def _lan_ip() -> str:
+    import socket
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except OSError:
+        return "127.0.0.1"
+
+
+def cmd_review(args, cfg) -> int:
+    """Só a fila de aprovação (+ renderização de recortes pedidos nela), sem capturar lives."""
+    import threading
+
+    from clipador.orchestrator import Orchestrator
+    from clipador.review.app import ReviewServer
+
+    if args.port:
+        cfg.settings._data.setdefault("review", {})["port"] = args.port
+    db = _db(cfg)
+    orch = Orchestrator(cfg, db)
+    orch.recover()
+    server = ReviewServer(cfg, db)
+    server.start()
+    # worker de edição para re-renderizar recortes/re-edições pedidos na fila
+    threading.Thread(target=orch._guard(orch.edit_loop), name="edit", daemon=True).start()
+    port = cfg.settings.get("review.port", 8787)
+    print(f"Fila de aprovação: http://localhost:{port}  |  no celular (mesmo Wi-Fi): http://{_lan_ip()}:{port}")
+    print("Ctrl+C para sair.")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        orch.stop()
+        server.stop()
+    return 0
+
+
 def cmd_status(args, cfg) -> int:
     db = _db(cfg)
     print("Tabelas:", json.dumps(db.stats()))
+    counts = db.clip_counts()
+    print("Clipes por status:", json.dumps(counts, ensure_ascii=False) or "{}")
+    stats = db.review_stats()
+    if stats:
+        print("Decisões por faixa de nota (aprovados/rejeitados/recortes):")
+        for r in stats:
+            print(f"  {r['band']:>6}: {r['approved']}/{r['rejected']}/{r['recut']}  (total {r['total']})")
+    print(f"Fila de aprovação: http://{_lan_ip()}:{cfg.settings.get('review.port', 8787)} (quando `run` ou `review` estiver rodando)")
     print("\nStreams ao vivo:", [s["streamer"] for s in db.live_streams()] or "nenhuma")
     print("\nÚltimos momentos:")
     for m in db.moments(10):
@@ -227,6 +279,14 @@ def cmd_healthcheck(args, cfg) -> int:
     wm = cfg.settings.resolve(cfg.settings.get("edit.watermark.file"))
     print(f"  [{'OK' if wm.exists() else 'AVISO'}] marca d'água {'encontrada' if wm.exists() else 'ausente (opcional): ' + str(wm)}")
     print(f"  [INFO] LLM: {'ativo' if cfg.settings.get('detect.llm.enabled') else 'desligado (local apenas)'}")
+    from clipador.edit.render import list_music, read_music_licenses
+    mdir = cfg.settings.resolve(cfg.settings.get("edit.music.dir", "assets/music_free"))
+    tracks = list_music(mdir)
+    lic = read_music_licenses(mdir)
+    missing = [t.name for t in tracks if t.name not in lic]
+    print(f"  [{'AVISO' if missing else 'INFO'}] música livre: {len(tracks)} faixa(s) em {mdir.name}"
+          + (f"; SEM registro em LICENSES.md: {missing}" if missing else "") + ("" if tracks else " (clip_youtube.mp4 não será gerado)"))
+    print(f"  [INFO] fila de aprovação: http://{_lan_ip()}:{cfg.settings.get('review.port', 8787)} quando `run`/`review` estiver ativo")
     if args.whisper:
         from clipador.detect.transcribe import Transcriber
         import numpy as np
@@ -261,6 +321,8 @@ def main(argv=None) -> int:
     r.add_argument("--url", help="sobrescreve a URL do streamers.yaml")
     r.add_argument("--minutes", type=float, default=10)
     sub.add_parser("status")
+    rv = sub.add_parser("review", help="só a fila de aprovação web (sem capturar lives)")
+    rv.add_argument("--port", type=int)
     h = sub.add_parser("healthcheck")
     h.add_argument("--whisper", action="store_true", help="também carrega o Whisper na GPU")
     args = p.parse_args(argv)
@@ -268,7 +330,7 @@ def main(argv=None) -> int:
     cfg = load_config()
     setup_logging(cfg.settings.path("logs_dir"), logging.DEBUG if args.verbose else logging.INFO)
     return {"run": cmd_run, "check": cmd_check, "process-file": cmd_process_file, "record": cmd_record,
-            "status": cmd_status, "healthcheck": cmd_healthcheck}[args.cmd](args, cfg)
+            "status": cmd_status, "review": cmd_review, "healthcheck": cmd_healthcheck}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

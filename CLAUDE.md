@@ -18,9 +18,12 @@ Responder em pt-BR; código, nomes de arquivos e commits em inglês. Spec comple
 .venv/Scripts/python -m clipador run                     # serviço completo
 .venv/Scripts/python -m clipador record --streamer gaules --minutes 6   # teste real curto
 .venv/Scripts/python -m clipador process-file VIDEO.mp4 --streamer coringa [--chat chat.jsonl]
-.venv/Scripts/python -m clipador status
+.venv/Scripts/python -m clipador status                  # inclui taxa de aprovação por faixa de nota
+.venv/Scripts/python -m clipador review [--port 8787]    # só a fila de aprovação web (+ worker de re-render)
 .venv/Scripts/python -m pytest -q tests
 ```
+Preview da fila no app: `.claude/launch.json` (nome `review`). Se a porta 8787 já estiver em uso, é porque
+um `clipador run` já está rodando e serve a fila; use essa instância em vez de subir outra.
 
 ## Arquitetura (contrato = SQLite `data/clipador.sqlite`, schema em `clipador/store/db.py`)
 ```
@@ -32,15 +35,25 @@ detect/    audio.py (RMS/dB -> sinal 0..1 por segundo), transcribe.py (faster-wh
            fallback), signals.py (chat, transcrição, keywords GTA, blocklist), scorer.py (combinação ponderada
            com renormalização de pesos quando falta sinal; picos; refine_bounds = gancho no pico sem cortar frase),
            llm.py (Haiku opcional, desligado), pipeline.py (Detector.detect_segment -> `moments`, dedupe)
-edit/      subtitles.py (ASS palavra-a-palavra com destaque), render.py (9:16 blur bg + ass + crédito drawtext +
-           marca d'água opcional + loudnorm; NVENC -> libx264 fallback; MediaNotReady se live ainda não cobre o fim)
-copy/      generator.py (3 títulos, descrição e hashtags por rede via templates + hashtags.yaml; post.md/post.json)
-orchestrator.py  threads monitor/detect/edit/retention; recover() após queda; 1 Whisper e 1 encode por vez
-__main__.py      CLI (run, check, process-file, record, status, healthcheck)
+edit/      subtitles.py (ASS palavra-a-palavra com destaque), render.py (9:16 blur bg + zoompan nos picos de áudio
+           [pick_zoom_peaks/zoom_expression] + layout center|split (facecam do streamers.yaml, _layout) + ass +
+           crédito drawtext + marca d'água opcional + loudnorm; NVENC -> libx264 fallback; MediaNotReady se a live
+           ainda não cobre o fim; _music_version: clip_youtube.mp4 = vídeo copiado + música de assets/music_free
+           normalizada (loudnorm I=-27) com sidechaincompress pela voz; LICENSES.md lido p/ atribuição)
+copy/      generator.py (3 títulos, descrição e hashtags por rede via templates + hashtags.yaml; post.md/post.json;
+           music_note/atribuição; chosen_title ao aprovar)
+review/    service.py (ReviewService: list/approve/reject/recut/reedit/restore/mark_posted/purge_old; grava `reviews`),
+           app.py (FastAPI + ReviewServer em thread; /api/clips, /media/{id}/{clip.mp4|clip_youtube.mp4|cover.jpg}),
+           templates/index.html (página única responsiva, JS puro)
+orchestrator.py  threads monitor/detect/edit/retention + ReviewServer; recover() após queda; 1 Whisper e 1 encode
+           por vez; auto-aprovação por nota (review.auto_approve_min_score); MediaNotReady com live encerrada -> failed
+__main__.py      CLI (run, check, process-file, record, status, review, healthcheck)
 ```
 Fluxo de status: segments `recorded -> detecting -> detected -> deleted`; moments `new -> editing -> clipped`
-(`waiting_media` enquanto a live não gravou o fim do clipe; `failed`, `dupe`, `rejected`).
-Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, cover.jpg, subs.ass, post.md, post.json}`.
+(`waiting_media` enquanto a live não gravou o fim do clipe; `failed`, `dupe`, `rejected`); clips
+`ready -> approved -> posted` (`rejected`, `superseded` após recorte/re-edição, `purged` após review.purge_after_hours).
+Recorte na fila: ajusta start/end do momento, status volta a `new`, o edit loop renderiza um clipe novo (mesmo moment_id).
+Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.mp4?, cover.jpg, subs.ass, post.md, post.json}`.
 
 ## Configuração
 - `config/streamers.yaml`: lista; handles marcados TODO precisam de confirmação. `enabled: false` desliga.
@@ -59,7 +72,14 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, cover.jpg, su
   `chat_offset_seconds` 7, piso de rajada `min_burst_rate` 1.5 msg/s, lista `sensitive_words` (x0.7).
   Com esses valores nenhuma das lives calmas gera clipe (correto). FALTA validar numa live movimentada
   (Coringa/GTA) e rever: `scripts/calibrate.py --stream N` recalcula tudo offline a partir do cache.
-- Fase 2: zoom dinâmico, facecam split, música livre (YouTube), fila de aprovação web, retenção já existe (básica).
+- Fase 2: CONCLUÍDA em 14/11/2026. Fila de aprovação web (FastAPI, porta 8787, responsiva; aprovar/rejeitar/
+  ajustar corte ±s/re-editar/restaurar/marcar postado; decisões em `reviews`; auto-aprovação opcional), zoom
+  dinâmico (zoompan, 12%, até 3 picos/clipe), layout facecam+gameplay por `facecam` no streamers.yaml, música livre
+  só em clip_youtube.mp4 (loudnorm -27 LUFS + ducking; LICENSES.md), purga de rejeitados após 72 h, MediaNotReady
+  com live encerrada vira failed. Validado: render center/split com zoom em 21-26 s (NVENC), recorte pela interface
+  re-renderizou em 30 s, aprovação reescreveu post.md. 20 testes passam. Sem faixas em assets/music_free ainda
+  (dono precisa baixar e registrar); facecam de todos os streamers ainda null (medir nas lives).
+  Contexto: GTA 6 só lança em 19/11, então não há live de GTA 6 para calibrar; usar GTA RP (Coringa) como proxy.
 - Fase 3: publicação automática (`publish/`), agendador anti-spam. Candidatos: Upload-Post API (via OpenShorts),
   APIs oficiais (YouTube Data v3, Instagram Graph, TikTok Content Posting). Automação do amigo do dono: desconhecida.
 - Fase 4: plano B OBS, 3 lives simultâneas estáveis, auto-aprovação, métricas.

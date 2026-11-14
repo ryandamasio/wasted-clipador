@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>{{ profile }} — aprovação</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --line:#262a33; --txt:#e8eaef; --mut:#8b93a5; --ok:#22c55e; --no:#ef4444; --warn:#f59e0b; --acc:#60a5fa; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; padding-bottom:40px; }
+  header { position:sticky; top:0; z-index:5; background:rgba(15,17,21,.95); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); padding:calc(10px + env(safe-area-inset-top,0px)) 14px 0; }
+  header h1 { font-size:17px; margin:0 0 8px; display:flex; justify-content:space-between; align-items:center; }
+  header h1 small { color:var(--mut); font-weight:400; font-size:12px; }
+  .tabs { display:flex; gap:4px; overflow-x:auto; }
+  .tabs button { flex:1; background:none; border:0; border-bottom:2px solid transparent; color:var(--mut); padding:8px 6px; font-size:14px; white-space:nowrap; }
+  .tabs button.on { color:var(--txt); border-color:var(--acc); }
+  .tabs button b { background:var(--line); border-radius:10px; padding:0 7px; margin-left:4px; font-size:12px; }
+  main { max-width:560px; margin:0 auto; padding:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; margin-bottom:16px; overflow:hidden; }
+  .vid { background:#000; display:flex; justify-content:center; }
+  .vid video { max-height:62vh; width:100%; object-fit:contain; display:block; }
+  .meta { padding:10px 12px 0; display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; color:var(--mut); font-size:13px; }
+  .score { font-weight:700; font-size:15px; padding:2px 9px; border-radius:9px; color:#000; background:var(--warn); }
+  .score.hi { background:var(--ok); } .score.lo { background:#94a3b8; }
+  .notes { padding:4px 12px 0; font-size:13px; color:var(--txt); }
+  .notes span { background:var(--line); border-radius:7px; padding:2px 8px; margin:2px 4px 2px 0; display:inline-block; }
+  details { padding:6px 12px 0; font-size:13px; color:var(--mut); }
+  details summary { cursor:pointer; color:var(--acc); }
+  details pre { white-space:pre-wrap; word-break:break-word; margin:6px 0 0; font:inherit; color:var(--txt); }
+  .titles { padding:10px 12px 0; }
+  .titles label { display:flex; gap:8px; align-items:center; margin-bottom:6px; }
+  .titles input[type=text], textarea, select { width:100%; background:#0f1115; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; }
+  textarea { min-height:92px; resize:vertical; }
+  .nets { padding:6px 12px 0; }
+  .net { border-top:1px solid var(--line); padding:8px 0; }
+  .net h4 { margin:0 0 6px; font-size:13px; display:flex; justify-content:space-between; align-items:center; text-transform:capitalize; }
+  .net h4 button { font-size:12px; padding:4px 10px; }
+  .acts { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:12px; }
+  .acts .wide { grid-column:1 / -1; }
+  button { cursor:pointer; border:0; border-radius:10px; padding:12px 10px; font:inherit; font-weight:600; background:var(--line); color:var(--txt); }
+  button.ok { background:var(--ok); color:#06220f; } button.no { background:var(--no); color:#fff; }
+  button.ghost { background:transparent; border:1px solid var(--line); }
+  button:disabled { opacity:.45; cursor:default; }
+  .panel { padding:0 12px 12px; display:none; }
+  .panel.on { display:block; }
+  .row { display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+  .row b { min-width:40px; color:var(--mut); font-weight:500; font-size:13px; }
+  .row button { padding:8px 0; min-width:46px; flex:0 0 auto; }
+  .row .val { min-width:40px; text-align:center; font-variant-numeric:tabular-nums; }
+  .row .ok { padding:10px 14px; }
+  .empty { text-align:center; color:var(--mut); padding:50px 10px; }
+  .toast { position:fixed; left:50%; bottom:calc(18px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); background:#222a38; color:#fff; padding:10px 16px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; max-width:90vw; }
+  .toast.on { opacity:1; }
+  .links { padding:0 12px 10px; font-size:13px; display:flex; gap:12px; flex-wrap:wrap; }
+  .links a { color:var(--acc); text-decoration:none; }
+  .stats { font-size:12px; color:var(--mut); padding:6px 12px 14px; text-align:center; }
+  .badge { font-size:11px; padding:1px 7px; border-radius:7px; background:var(--line); color:var(--mut); }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>{{ profile }} <small>fila de aprovação</small></span><small id="pend"></small></h1>
+  <div class="tabs" id="tabs">
+    <button data-s="ready" class="on">Pendentes<b id="n-ready">0</b></button>
+    <button data-s="approved">Aprovados<b id="n-approved">0</b></button>
+    <button data-s="rejected">Rejeitados<b id="n-rejected">0</b></button>
+    <button data-s="posted">Postados<b id="n-posted">0</b></button>
+    <button data-s="all">Todos</button>
+  </div>
+</header>
+<main id="list"><div class="empty">carregando…</div></main>
+<div class="stats" id="stats"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const REJECT = {{ reject_reasons | tojson }};
+const NETS = { youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", kwai: "Kwai" };
+let status = "ready", clips = [], busy = false;
+
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(msg, ms = 2200) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), ms); }
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ("erro " + r.status));
+  return j;
+}
+
+async function load() {
+  try {
+    const j = await api(`/api/clips?status=${status}`);
+    clips = j.clips; render(); renderStats(j.stats);
+  } catch (e) { $("#list").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+function renderStats(st) {
+  const c = st.counts || {};
+  for (const k of ["ready", "approved", "rejected", "posted"]) $("#n-" + k).textContent = c[k] || 0;
+  $("#pend").textContent = st.pending_moments ? `${st.pending_moments} renderizando…` : "";
+  const rows = (st.by_score || []).map(b => `${b.band}: ${b.approved}✓ ${b.rejected}✗ ${b.recut}✂`).join(" · ");
+  $("#stats").textContent = rows ? "decisões por nota — " + rows : "";
+}
+
+function scoreClass(s) { return s >= 70 ? "hi" : s >= 55 ? "" : "lo"; }
+
+function card(c) {
+  const titles = c.titles.map((t, i) => `<label><input type="radio" name="t${c.id}" value="${i}" ${t === c.chosen_title ? "checked" : ""}><input type="text" data-i="${i}" value="${esc(t)}"></label>`).join("");
+  const nets = Object.entries(c.networks).map(([n, d]) => `
+    <div class="net" data-net="${n}"><h4>${NETS[n] || n}<button class="ghost" data-copy="${n}">copiar</button></h4>
+      <input type="text" class="nt" value="${esc(d.title)}" style="margin-bottom:6px">
+      <textarea class="nd">${esc(d.description)}</textarea></div>`).join("");
+  const comps = Object.entries(c.components).filter(([, v]) => v != null).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(" · ");
+  const ready = c.status === "ready";
+  const acts = ready ? `
+      <button class="ok" data-a="approve">✓ Aprovar</button>
+      <button class="no" data-a="reject">✗ Rejeitar</button>
+      <button class="ghost" data-a="recut-panel" ${c.media_available ? "" : "disabled title='gravação bruta já apagada'"}>✂ Ajustar corte</button>
+      <button class="ghost" data-a="reedit" ${c.media_available ? "" : "disabled"}>↻ Re-editar</button>`
+    : c.status === "approved" ? `
+      <button class="ok wide" data-a="posted">📤 Marcar como postado</button>
+      <button class="ghost" data-a="reject">✗ Rejeitar</button><button class="ghost" data-a="restore">↩ Voltar p/ fila</button>`
+    : c.status === "rejected" ? `<button class="ghost wide" data-a="restore">↩ Voltar para a fila</button>`
+    : `<span class="badge">${esc(c.status)}</span>`;
+  return `<article class="card" data-id="${c.id}">
+    <div class="vid"><video controls playsinline preload="metadata" ${c.has_cover ? `poster="/media/${c.id}/cover.jpg"` : ""} src="/media/${c.id}/clip.mp4"></video></div>
+    <div class="meta"><span class="score ${scoreClass(c.score)}">${c.score}</span><b>${esc(c.streamer_name)}</b><span>${c.duration}s</span><span>${c.when}</span>
+      <span class="badge">${esc(c.render.layout || "center")}${c.render.zoom && c.render.zoom.length ? " · zoom×" + c.render.zoom.length : ""}${c.recut_count ? " · recorte " + c.recut_count : ""}</span></div>
+    <div class="notes">${c.notes.map(n => `<span>${esc(n)}</span>`).join("")}<span style="background:none;color:var(--mut)">${esc(comps)}</span></div>
+    <details><summary>transcrição</summary><pre>${esc(c.transcript || "(sem fala)")}</pre></details>
+    ${ready ? `<div class="titles">${titles}</div>` : `<div class="titles"><b>${esc(c.chosen_title)}</b></div>`}
+    <details class="nets-wrap"><summary>textos por rede (${Object.keys(c.networks).length})</summary><div class="nets">${nets}</div></details>
+    <div class="links"><a href="/media/${c.id}/clip.mp4" download>⬇ clip.mp4</a>${c.has_music_video ? `<a href="/media/${c.id}/clip_youtube.mp4" download>⬇ versão YouTube (música)</a>` : ""}<span style="color:var(--mut)">${esc(c.music_note || "")}</span></div>
+    <div class="acts">${acts}</div>
+    <div class="panel reject"><div class="row"><b>motivo</b><select class="rr">${REJECT.map(r => `<option>${esc(r)}</option>`).join("")}</select><button class="no" data-a="reject-go">Confirmar rejeição</button></div></div>
+    <div class="panel recut">
+      <div class="row"><b>início</b><button data-d="s-2">−2s</button><button data-d="s-1">−1s</button><span class="val sv">0s</span><button data-d="s+1">+1s</button><button data-d="s+2">+2s</button></div>
+      <div class="row"><b>fim</b><button data-d="e-2">−2s</button><button data-d="e-1">−1s</button><span class="val ev">0s</span><button data-d="e+1">+1s</button><button data-d="e+2">+2s</button></div>
+      <div class="row"><button class="ok" data-a="recut-go">Re-renderizar com esse corte</button><span class="mut" style="font-size:12px;color:var(--mut)">o clipe novo aparece em Pendentes em ~1 min</span></div>
+    </div>
+  </article>`;
+}
+
+function render() {
+  const el = $("#list");
+  if (!clips.length) { el.innerHTML = `<div class="empty">${status === "ready" ? "Nada pendente. 🎉" : "Nenhum clipe aqui."}</div>`; return; }
+  el.innerHTML = clips.map(card).join("");
+  // pausa os outros vídeos quando um começa
+  el.querySelectorAll("video").forEach(v => v.addEventListener("play", () => el.querySelectorAll("video").forEach(o => { if (o !== v) o.pause(); })));
+}
+
+function collect(art) {
+  const sel = art.querySelector("input[type=radio]:checked");
+  const idx = sel ? sel.value : 0;
+  const title = (art.querySelector(`.titles input[type=text][data-i="${idx}"]`) || {}).value;
+  const networks = {};
+  art.querySelectorAll(".net").forEach(n => { networks[n.dataset.net] = { title: $(".nt", n).value, description: $(".nd", n).value }; });
+  return { title, networks };
+}
+
+function removeCard(art, msg) {
+  art.style.transition = "opacity .25s, transform .25s"; art.style.opacity = 0; art.style.transform = "translateX(40px)";
+  setTimeout(() => { art.remove(); if (!$("#list .card")) load(); }, 260);
+  toast(msg); api("/api/stats").then(renderStats).catch(() => {});
+}
+
+$("#list").addEventListener("click", async ev => {
+  const btn = ev.target.closest("button"); if (!btn) return;
+  const art = btn.closest(".card"); const id = art.dataset.id;
+  if (btn.dataset.copy) {
+    const n = art.querySelector(`.net[data-net="${btn.dataset.copy}"]`);
+    const txt = $(".nt", n).value + "\n\n" + $(".nd", n).value;
+    try { await navigator.clipboard.writeText(txt); toast("copiado: " + NETS[btn.dataset.copy]); } catch { toast("não deu para copiar (precisa de HTTPS/localhost)"); }
+    return;
+  }
+  if (btn.dataset.d) {
+    const [which, sign, n] = [btn.dataset.d[0], btn.dataset.d[1], +btn.dataset.d.slice(2)];
+    const v = $(which === "s" ? ".sv" : ".ev", art);
+    const cur = parseFloat(v.dataset.v || 0) + (sign === "-" ? -n : n);
+    v.dataset.v = cur; v.textContent = (cur > 0 ? "+" : "") + cur + "s";
+    return;
+  }
+  const a = btn.dataset.a; if (!a || busy) return;
+  try {
+    if (a === "reject") { $(".panel.reject", art).classList.toggle("on"); $(".panel.recut", art).classList.remove("on"); return; }
+    if (a === "recut-panel") { $(".panel.recut", art).classList.toggle("on"); $(".panel.reject", art).classList.remove("on"); return; }
+    busy = true; btn.disabled = true;
+    if (a === "approve") { await api(`/api/clips/${id}/approve`, collect(art)); removeCard(art, "✓ aprovado"); }
+    else if (a === "reject-go") { await api(`/api/clips/${id}/reject`, { reason: $(".rr", art).value }); removeCard(art, "✗ rejeitado"); }
+    else if (a === "reedit") { await api(`/api/clips/${id}/reedit`); removeCard(art, "↻ re-editando…"); }
+    else if (a === "recut-go") {
+      await api(`/api/clips/${id}/recut`, { start_delta: parseFloat($(".sv", art).dataset.v || 0), end_delta: parseFloat($(".ev", art).dataset.v || 0) });
+      removeCard(art, "✂ recortando…");
+    }
+    else if (a === "restore") { await api(`/api/clips/${id}/restore`); removeCard(art, "↩ de volta à fila"); }
+    else if (a === "posted") { await api(`/api/clips/${id}/posted`, { platforms: ["manual"] }); removeCard(art, "📤 marcado como postado"); }
+  } catch (e) { toast("erro: " + e.message, 4000); btn.disabled = false; }
+  finally { busy = false; }
+});
+
+$("#tabs").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  $("#tabs .on").classList.remove("on"); b.classList.add("on"); status = b.dataset.s; load();
+});
+
+// atalhos no PC: A aprova / R rejeita o primeiro card visível
+document.addEventListener("keydown", ev => {
+  if (ev.target.matches("input,textarea,select") || status !== "ready") return;
+  const first = $("#list .card"); if (!first) return;
+  if (ev.key === "a" || ev.key === "A") $('[data-a="approve"]', first)?.click();
+  if (ev.key === "r" || ev.key === "R") { $('[data-a="reject"]', first)?.click(); }
+});
+
+load();
+setInterval(() => { if (!busy) api("/api/stats").then(renderStats).catch(() => {}); }, 30000);
+</script>
+</body>
+</html>

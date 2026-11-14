@@ -40,6 +40,7 @@ class Orchestrator:
         self._rec_lock = threading.Lock()
         self.detector: Detector | None = None
         self.renderer: Renderer | None = None
+        self.review_server = None
         self.paused_for_disk = False
 
     # ------------------------------------------------------------- lifecycle
@@ -47,6 +48,8 @@ class Orchestrator:
         log.info("Clipador iniciado. Navegador p/ Kick: %s. Streamers ativos: %s", self.browser or "nenhum",
                  ", ".join(s.handle for s in self.cfg.enabled_streamers))
         self.recover()
+        if self.cfg.settings.get("review.enabled", True):
+            self.start_review_server()
         threads = [
             threading.Thread(target=self._guard(self.monitor_loop), name="monitor", daemon=True),
             threading.Thread(target=self._guard(self.detect_loop), name="detect", daemon=True),
@@ -63,8 +66,19 @@ class Orchestrator:
         finally:
             self.stop()
 
+    def start_review_server(self) -> None:
+        try:
+            from clipador.review.app import ReviewServer
+
+            self.review_server = ReviewServer(self.cfg, self.db)
+            self.review_server.start()
+        except Exception:  # noqa: BLE001
+            log.exception("fila de aprovação não subiu (o resto continua)")
+
     def stop(self) -> None:
         self.stop_event.set()
+        if self.review_server:
+            self.review_server.stop()
         with self._rec_lock:
             for rec, chat in self.recorders.values():
                 rec.stop()
@@ -211,6 +225,11 @@ class Orchestrator:
         try:
             result = self.renderer.render(m, segments, streamer, out_dir, live)
         except MediaNotReady as exc:
+            if not live:
+                # live acabou (ou é arquivo) e a mídia não existe mais: não adianta esperar
+                self.db.update("moments", m["id"], status="failed")
+                log.warning("momento %d sem mídia disponível (%s): marcado como failed", m["id"], exc)
+                return True
             self.db.update("moments", m["id"], status="waiting_media")
             log.debug("momento %d aguardando mídia: %s", m["id"], exc)
             return False
@@ -220,14 +239,22 @@ class Orchestrator:
             return True
         reasons = json.loads(m["reasons"]) if isinstance(m["reasons"], str) else m["reasons"]
         llm_title = (reasons.get("llm") or {}).get("title") if isinstance(reasons, dict) else None
-        copy_data = generate_copy(self.cfg, streamer, m, llm_title)
+        copy_data = generate_copy(self.cfg, streamer, m, llm_title, music=result.music)
         post_md = write_post_files(out_dir, copy_data, m, streamer, clip_name)
+        render_info = {"layout": result.layout, "zoom": result.zoom_peaks, "margin_v": result.margin_v, "encoder": result.encoder}
         clip_id = self.db.add_clip(m["id"], result.video, result.cover, post_md, result.duration,
-                                   copy_data["titles"][0], copy_data)
+                                   copy_data["titles"][0], copy_data, result.music_video, render_info)
         self.db.update("moments", m["id"], status="clipped")
         latency = time.time() - m["peak_ts"]
-        log.info("CLIPE PRONTO #%d (%.0fs, nota %.0f, %s, %.0f min após o momento): %s", clip_id, result.duration,
-                 m["score"], result.encoder, latency / 60, out_dir)
+        log.info("CLIPE PRONTO #%d (%.0fs, nota %.0f, %s, %s, %.0f min após o momento): %s", clip_id, result.duration,
+                 m["score"], result.encoder, result.layout, latency / 60, out_dir)
+        auto_min = self.cfg.settings.get("review.auto_approve_min_score")
+        if auto_min is not None and float(m["score"]) >= float(auto_min):
+            self.db.update("clips", clip_id, status="approved", chosen_title=copy_data["titles"][0], reviewed_at=time.time(),
+                           review_note=f"auto (nota >= {auto_min})")
+            self.db.add_review({"id": clip_id, "moment_id": m["id"]}, "auto", f"nota >= {auto_min}",
+                               chosen_title=copy_data["titles"][0], moment=m)
+            log.info("clipe #%d auto-aprovado (nota %.0f >= %s)", clip_id, m["score"], auto_min)
         return True
 
     # ------------------------------------------------------------- retention
@@ -254,6 +281,10 @@ class Orchestrator:
             for d in rec_dir.glob("*/run_*"):
                 if d.is_dir() and not any(d.glob("*.ts")):
                     shutil.rmtree(d, ignore_errors=True)
+            # pastas de clipes rejeitados/substituídos antigos
+            from clipador.review.service import ReviewService
+
+            ReviewService(self.cfg, self.db).purge_old(self.cfg.settings.get("review.purge_after_hours"))
         except Exception:  # noqa: BLE001
             log.exception("retenção falhou")
         return removed
