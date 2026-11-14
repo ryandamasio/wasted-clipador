@@ -1,0 +1,22 @@
+# Bancos de hashtags por rede. "big" = volume alto, "mid" = médio, "niche" = nicho/streamer.
+# A geração mistura 2-3 big + 2-4 mid + 1-3 niche respeitando o máximo da rede.
+limits:
+  youtube: 5
+  tiktok: 6
+  instagram: 12
+  kwai: 6
+
+big: ["gta6", "gta", "gtavi", "rockstar", "games", "gameplay", "viral", "cortes"]
+mid: ["gta6gameplay", "gta6brasil", "cortesgta", "gtarp", "lives", "streamer", "twitchbr", "kickbr", "jogos", "clipes", "momentos", "shorts", "reels", "fyp", "foryou", "parati"]
+niche: ["cortesgta6", "gta6clips", "gta6momentos", "gta6ps5", "gta6xbox", "gta6lancamento"]
+
+# Hashtags extras por streamer (handle -> lista). Use o handle do streamers.yaml.
+streamers:
+  coringa: ["coringa", "loudcoringa", "cortescoringa", "coringadas"]
+  paulinholokobr: ["paulinholoko", "paulinholokobr", "cortespaulinho"]
+  gaules: ["gaules", "tribo", "cortesgaules"]
+  baiano: ["baiano", "cortesbaiano"]
+  alanzoka: ["alanzoka", "cortesalanzoka"]
+  casimito: ["casimiro", "cazetv", "cortescasimiro"]
+  davyjones: ["davyjones", "gameplayrj"]
+  pedro: ["pedro"]

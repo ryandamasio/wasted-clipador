@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pip-cache/
+.pytest_cache/
+*.egg-info/
+
+# Secrets
+.env
+
+# Data (recordings, clips, db, models, logs) — nunca commitar
+data/
+!data/.gitkeep
+
+# Assets pesados (músicas/fontes podem ser grandes; manter LICENSES.md)
+assets/music_free/*
+!assets/music_free/.gitkeep
+!assets/music_free/LICENSES.md
+
+# OS / editor
+Thumbs.db
+.DS_Store
+*.log

@@ -1,0 +1,102 @@
+# Streamers monitorados. Edite livremente.
+#   platform: twitch | kick | youtube
+#   url: URL exata da live (para youtube use /@handle/live)
+#   priority: 1 = maior prioridade quando há mais lives do que slots
+#   display: como aparece no crédito ("Clipe: @display")
+#   channel_link: link usado na descrição do post
+#   facecam: região da facecam em fração da tela {x, y, w, h} ou null (Fase 2)
+#   chat_offset_seconds: atraso do vídeo em relação ao chat (ajuste por streamer; null usa o global)
+#
+# Fonte da lista inicial (nov/2026): Streams Charts 2025 (horas assistidas, games BR):
+#   Gaules, Baiano, Coringa, PaulinhoLOKObr, Alanzoka, TcK10; GTA: drb7h, Coringa, PaulinhoLOKObr.
+#   Coringa migrou para a Kick (kick.com/coringa). Kick já supera Twitch em audiência de GTA.
+# CONFIRME os handles antes de rodar: alguns abaixo são a melhor suposição (marcados com TODO).
+
+streamers:
+  - name: Coringa
+    handle: coringa
+    platform: kick
+    url: https://kick.com/coringa
+    priority: 1
+    display: "@loud_coringa"
+    channel_link: https://kick.com/coringa
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: PaulinhoLOKObr
+    handle: paulinholokobr
+    platform: kick
+    url: https://kick.com/paulinholokobr    # TODO confirmar handle
+    priority: 2
+    display: "@paulinholokobr"
+    channel_link: https://kick.com/paulinholokobr
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: Gaules
+    handle: gaules
+    platform: twitch
+    url: https://www.twitch.tv/gaules
+    priority: 2
+    display: "@gaules"
+    channel_link: https://www.twitch.tv/gaules
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: Baiano
+    handle: baiano
+    platform: twitch
+    url: https://www.twitch.tv/baiano
+    priority: 3
+    display: "@baiano"
+    channel_link: https://www.twitch.tv/baiano
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: Alanzoka
+    handle: alanzoka
+    platform: twitch
+    url: https://www.twitch.tv/alanzoka
+    priority: 3
+    display: "@alanzoka"
+    channel_link: https://www.twitch.tv/alanzoka
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: Casimiro
+    handle: casimito
+    platform: twitch
+    url: https://www.twitch.tv/casimito
+    priority: 4
+    display: "@casimito"
+    channel_link: https://www.twitch.tv/casimito
+    enabled: false
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: Davy Jones
+    handle: davyjones
+    platform: youtube
+    url: https://www.youtube.com/@DavyJones/live    # TODO confirmar canal (o pedido dizia "David Jones")
+    priority: 4
+    display: "@DavyJones"
+    channel_link: https://www.youtube.com/@DavyJones
+    enabled: false
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: Pedro
+    handle: pedro
+    platform: twitch
+    url: https://www.twitch.tv/pedro    # TODO preencher canal do amigo
+    priority: 1
+    display: "@pedro"
+    channel_link: https://www.twitch.tv/pedro
+    enabled: false
+    facecam: null
+    chat_offset_seconds: null
