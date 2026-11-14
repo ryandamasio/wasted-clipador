@@ -50,8 +50,11 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, cover.jpg, su
 - `.env` (copiar de `.env.example`): `ANTHROPIC_API_KEY` opcional (ativa `detect.llm.enabled`).
 
 ## Status (atualize ao fim de cada fase)
-- Fase 1 (MVP): código completo; testes unitários passam; healthcheck OK (NVENC, CUDA, Whisper small int8_float16
-  carrega em ~22 s). Teste real em andamento (ver README > Status).
+- Fase 1 (MVP): CONCLUÍDA e validada em 14/11/2026. Testes unitários passam. Healthcheck OK. Whisper small
+  int8_float16 transcreve 120 s em 4-6 s na GTX 1660. Teste real (`record` 6 min do Gaules): captura, segmentos,
+  chat IRC e detecção OK (sem momentos: rerun calmo, chat vazio). Teste `process-file` num vídeo de 4 min:
+  clipe 1080x1920 renderizado com NVENC em 19 s, legenda/crédito corretos (ver data/output/2026-11-14).
+  Pendente de calibração: `min_score`/pesos só podem ser ajustados com uma live movimentada com chat.
 - Fase 2: zoom dinâmico, facecam split, música livre (YouTube), fila de aprovação web, retenção já existe (básica).
 - Fase 3: publicação automática (`publish/`), agendador anti-spam. Candidatos: Upload-Post API (via OpenShorts),
   APIs oficiais (YouTube Data v3, Instagram Graph, TikTok Content Posting). Automação do amigo do dono: desconhecida.

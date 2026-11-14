@@ -78,6 +78,10 @@ class Detector:
 
         # --- áudio
         audio = decode_audio(path)
+        if len(audio) == 0:
+            log.warning("segmento %d sem áudio: nada a detectar", seg_id)
+            self.db.update("segments", seg_id, status="detected")
+            return []
         total = max(total, int(len(audio) / 16000))
         baseline = self._audio_baseline.get(stream["id"])
         audio_sig, new_baseline = per_second_energy_signal(audio, total, float(self.d.get("audio", {}).get("rms_window_seconds", 0.5)), baseline)

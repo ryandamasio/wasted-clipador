@@ -166,7 +166,7 @@ class Renderer:
         encoders = [self.e.get("encoder", "h264_nvenc"), "libx264"]
         last_err = ""
         for enc in dict.fromkeys(encoders):
-            cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-nostdin",
+            cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-nostdin", "-analyzeduration", "20M", "-probesize", "50M",
                    "-ss", f"{offset:.3f}", "-f", "concat", "-safe", "0", "-i", str(concat), *extra_inputs,
                    "-t", f"{duration:.3f}", "-filter_complex", graph, "-map", "[vout]", "-map", "[aout]"]
             if enc == "h264_nvenc":

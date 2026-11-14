@@ -34,8 +34,11 @@ class ChatRecorder(threading.Thread):
         self._lock = threading.Lock()
         self.count = 0
         self.connected = False
+        self._last_flush = time.time()
+        self.flush_interval = 2.0
 
     def run(self) -> None:
+        threading.Thread(target=self._flusher, name=f"{self.name}-flush", daemon=True).start()
         backoff = 5
         while not self.stop_event.is_set():
             try:
@@ -53,11 +56,16 @@ class ChatRecorder(threading.Thread):
                 self.flush()
         self.flush()
 
+    def _flusher(self) -> None:
+        """Grava o buffer periodicamente para a detecção ver o chat quase em tempo real."""
+        while not self.stop_event.wait(self.flush_interval):
+            self.flush()
+
     def _push(self, username: str | None, text: str) -> None:
         with self._lock:
             self._buffer.append((self.stream_id, time.time(), username, text[:500]))
             self.count += 1
-            if len(self._buffer) >= 50:
+            if len(self._buffer) >= 200:
                 self._flush_locked()
 
     def flush(self) -> None:
@@ -65,6 +73,7 @@ class ChatRecorder(threading.Thread):
             self._flush_locked()
 
     def _flush_locked(self) -> None:
+        self._last_flush = time.time()
         if self._buffer:
             try:
                 self.db.add_chat_messages(self._buffer)

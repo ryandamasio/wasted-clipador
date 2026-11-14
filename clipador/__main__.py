@@ -71,6 +71,8 @@ def cmd_process_file(args, cfg) -> int:
     if not src.exists():
         print(f"arquivo não encontrado: {src}", file=sys.stderr)
         return 2
+    if args.min_score is not None:
+        cfg.settings._data.setdefault("detect", {})["min_score"] = args.min_score
     db = _db(cfg)
     orch = Orchestrator(cfg, db)
     seg_len = int(cfg.settings.get("capture.segment_seconds", 120))
@@ -246,6 +248,7 @@ def main(argv=None) -> int:
     pf.add_argument("--chat", help="JSONL com {t, user, text} (t em segundos do vídeo)")
     pf.add_argument("--max-clips", type=int, default=0)
     pf.add_argument("--base-ts", type=float, default=0.0)
+    pf.add_argument("--min-score", type=float, help="sobrescreve detect.min_score (útil para forçar clipes em teste)")
     r = sub.add_parser("record")
     r.add_argument("--streamer", required=True)
     r.add_argument("--url", help="sobrescreve a URL do streamers.yaml")

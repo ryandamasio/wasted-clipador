@@ -14,7 +14,7 @@ SAMPLE_RATE = 16000
 def decode_audio(path: Path, start: float | None = None, duration: float | None = None,
                  concat_list: Path | None = None) -> np.ndarray:
     """Decodifica para float32 mono 16 kHz. Aceita arquivo único ou lista concat do ffmpeg."""
-    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin"]
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-analyzeduration", "20M", "-probesize", "50M"]
     if start is not None:
         cmd += ["-ss", f"{start:.3f}"]
     if concat_list is not None:
@@ -26,6 +26,10 @@ def decode_audio(path: Path, start: float | None = None, duration: float | None 
     cmd += ["-vn", "-ac", "1", "-ar", str(SAMPLE_RATE), "-f", "s16le", "-"]
     proc = subprocess.run(cmd, capture_output=True, check=False)
     if proc.returncode != 0:
+        err = proc.stderr.decode("utf-8", "replace")
+        if "does not contain any stream" in err or "Stream map" in err:
+            log.warning("sem faixa de áudio utilizável em %s; tratando como silêncio", concat_list or path)
+            return np.zeros(0, dtype=np.float32)
         raise RuntimeError(f"ffmpeg falhou ao decodificar áudio: {proc.stderr.decode('utf-8', 'replace')[-400:]}")
     audio = np.frombuffer(proc.stdout, dtype=np.int16).astype(np.float32) / 32768.0
     return audio
