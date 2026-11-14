@@ -217,6 +217,81 @@ class ReviewService:
     def publish_status(self) -> dict:
         return self.scheduler.status_summary()
 
+    # ------------------------------------------------------------------ painel de métricas
+    def metrics(self, days: int = 7) -> dict:
+        """Números do pipeline: produção por dia/streamer, aprovação, latência, posts e saúde do sistema."""
+        import shutil
+        import subprocess
+
+        now = time.time()
+        since = now - days * 86400
+        db = self.db
+        per_day = db.fetchall(
+            """SELECT date(c.created_at, 'unixepoch', 'localtime') AS day, COUNT(*) AS clips,
+                      SUM(c.status IN ('approved','posted')) AS approved, SUM(c.status = 'rejected') AS rejected,
+                      SUM(c.status = 'posted') AS posted
+               FROM clips c WHERE c.created_at >= ? GROUP BY day ORDER BY day""", [since])
+        per_streamer = db.fetchall(
+            """SELECT s.streamer, COUNT(DISTINCT st.id) AS streams, COUNT(DISTINCT seg.id) AS segments,
+                      COUNT(DISTINCT m.id) AS moments, COUNT(DISTINCT c.id) AS clips,
+                      SUM(c.status IN ('approved','posted')) AS approved, SUM(c.status = 'rejected') AS rejected,
+                      ROUND(AVG(m.score), 1) AS avg_score
+               FROM streams s LEFT JOIN streams st ON st.id = s.id
+               LEFT JOIN segments seg ON seg.stream_id = s.id
+               LEFT JOIN moments m ON m.stream_id = s.id
+               LEFT JOIN clips c ON c.moment_id = m.id
+               WHERE s.started_at >= ? GROUP BY s.streamer ORDER BY clips DESC""", [since])
+        latency = db.fetchone(
+            """SELECT ROUND(AVG(c.created_at - m.peak_ts) / 60.0, 1) AS avg_min, ROUND(MIN(c.created_at - m.peak_ts) / 60.0, 1) AS min_min,
+                      ROUND(MAX(c.created_at - m.peak_ts) / 60.0, 1) AS max_min, COUNT(*) AS n
+               FROM clips c JOIN moments m ON m.id = c.moment_id JOIN streams s ON s.id = m.stream_id
+               WHERE c.created_at >= ? AND s.url NOT LIKE '%.mp4' AND c.created_at - m.peak_ts < 6 * 3600""", [since]) or {}
+        posts = db.fetchall(
+            """SELECT platform, COUNT(*) AS total, SUM(status = 'posted') AS posted, SUM(status = 'failed') AS failed,
+                      SUM(status = 'scheduled') AS scheduled FROM posts GROUP BY platform""")
+        views = {}
+        for p in db.posts(status="posted", limit=500):
+            if p.get("metrics_json"):
+                try:
+                    m = json.loads(p["metrics_json"])
+                except Exception:  # noqa: BLE001
+                    continue
+                v = views.setdefault(p["platform"], {"views": 0, "likes": 0, "n": 0})
+                v["views"] += int(m.get("views") or m.get("plays") or 0)
+                v["likes"] += int(m.get("likes") or 0)
+                v["n"] += 1
+        backlog = db.fetchone("SELECT SUM(status='recorded') AS to_detect, SUM(status='detecting') AS detecting FROM segments") or {}
+        pending = db.fetchone("SELECT SUM(status='new') AS new, SUM(status='waiting_media') AS waiting, SUM(status='editing') AS editing FROM moments") or {}
+        live = [{"streamer": s["streamer"], "since": time.strftime("%H:%M", time.localtime(s["started_at"])),
+                 "segments": db.fetchone("SELECT COUNT(*) AS n FROM segments WHERE stream_id=?", [s["id"]])["n"]} for s in db.live_streams()]
+        data_dir = self.cfg.settings.path("data_dir")
+        usage = shutil.disk_usage(data_dir)
+        gpu = None
+        try:
+            out = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu",
+                                  "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=5).stdout.strip()
+            if out:
+                u, mu, mt, tp = [x.strip() for x in out.split(",")[:4]]
+                gpu = {"util": int(u), "mem_used": int(mu), "mem_total": int(mt), "temp": int(tp)}
+        except Exception:  # noqa: BLE001
+            pass
+        rec_size = 0.0
+        try:
+            rec_size = sum(f.stat().st_size for f in self.cfg.settings.path("recordings_dir").rglob("*.ts")) / 1e9
+        except Exception:  # noqa: BLE001
+            pass
+        backups = sorted((self.cfg.settings.path("data_dir") / "backups").glob("*.sqlite")) if (self.cfg.settings.path("data_dir") / "backups").exists() else []
+        return {
+            "days": days, "per_day": per_day, "per_streamer": per_streamer, "latency": latency, "posts": posts, "views": views,
+            "reviews": db.review_stats(), "counts": db.clip_counts(),
+            "health": {"live": live, "backlog": {k: int(v or 0) for k, v in backlog.items()}, "pending": {k: int(v or 0) for k, v in pending.items()},
+                       "disk_free_gb": round(usage.free / 1e9, 1), "recordings_gb": round(rec_size, 2), "gpu": gpu,
+                       "last_backup": time.strftime("%d/%m %H:%M", time.localtime(backups[-1].stat().st_mtime)) if backups else None,
+                       "publish_mode": self.cfg.settings.get("publish.mode", "manual"),
+                       "plan_b": bool(self.cfg.settings.get("capture.plan_b.enabled"))},
+            "generated_at": time.strftime("%d/%m %H:%M:%S"),
+        }
+
     def recut(self, clip_id: int, start_delta: float = 0.0, end_delta: float = 0.0, reedit: bool = False) -> dict:
         """Move início/fim (segundos; negativo = antes) e manda o momento de volta para a fila de edição.
 

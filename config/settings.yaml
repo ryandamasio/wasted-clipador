@@ -23,6 +23,18 @@ capture:
   record_chat: true
   retention_hours: 12              # apaga gravações brutas após X horas se já processadas
   min_free_gb: 20                  # pausa captura se o disco ficar abaixo disso
+  plan_b:                          # captura de tela quando streamlink E yt-dlp falham (Kick bloqueando, etc.)
+    enabled: false                 # ligue depois de configurar o áudio loopback (ver README "Plano B")
+    force: false                   # true = usa sempre a tela (teste)
+    after_failures: 2              # falhas rápidas seguidas antes de cair para a tela
+    region: {x: 0, y: 0, w: 1920, h: 1080}   # região/monitor onde o navegador kiosk abre e é capturado
+    audio_device: ""               # nome dshow do loopback, ex.: "virtual-audio-capturer" ou "CABLE Output (VB-Audio Virtual Cable)"
+    fps: 30
+    bitrate: "6M"
+    encoder: h264_nvenc            # fallback: libx264
+    open_browser: true             # abre o Chrome em kiosk na região (perfil próprio em data/browser_profile)
+    browser_warmup_seconds: 12
+  backup_db_hours: 24              # cópia do SQLite em data/backups (mantém 7)
 
 detect:
   window_seconds: 8                # janela deslizante de pontuação

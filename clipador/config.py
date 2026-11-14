@@ -92,7 +92,34 @@ class Config:
 
     @property
     def enabled_streamers(self) -> list[Streamer]:
-        return sorted((s for s in self.streamers if s.enabled), key=lambda s: s.priority)
+        blocked = self.blocklist()
+        return sorted((s for s in self.streamers if s.enabled and s.handle not in blocked), key=lambda s: s.priority)
+
+    # --- lista de bloqueio (pedido de remoção de streamer) ---------------------
+    @staticmethod
+    def blocklist_path() -> Path:
+        return CONFIG_DIR / "blocklist.yaml"
+
+    def blocklist(self) -> set[str]:
+        p = self.blocklist_path()
+        if not p.exists():
+            return set()
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        return {str(h).lower() for h in (data.get("streamers") or [])}
+
+    def block_streamer(self, handle: str, reason: str = "") -> None:
+        p = self.blocklist_path()
+        data = (yaml.safe_load(p.read_text(encoding="utf-8")) if p.exists() else None) or {}
+        items = list(data.get("streamers") or [])
+        if handle.lower() not in {str(h).lower() for h in items}:
+            items.append(handle.lower())
+        data["streamers"] = items
+        notes = dict(data.get("notes") or {})
+        if reason:
+            notes[handle.lower()] = reason
+        data["notes"] = notes
+        p.write_text("# Streamers bloqueados (pedido de remoção). Nunca serão gravados nem clipados, mesmo com enabled: true.\n"
+                     + yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     def ensure_dirs(self) -> None:
         for key in ("data_dir", "recordings_dir", "clips_dir", "output_dir", "models_dir", "logs_dir"):

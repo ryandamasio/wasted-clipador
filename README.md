@@ -1,8 +1,11 @@
-# Clipador
+# WASTED — o clipador de lives
+
+> *Wasted*: a tela que aparece no GTA quando o personagem cai. Aqui, é o momento em que a live "cai" no corte.
 
 Clipes automáticos de lives para o nicho **Cortes GTA 6**: monitora streamers na Twitch, Kick e YouTube,
-grava, detecta os melhores momentos (chat + áudio + transcrição), corta em 9:16 com legenda dinâmica e entrega
-o clipe pronto com títulos, descrição e hashtags por rede para você postar.
+grava, detecta os melhores momentos (chat + áudio + transcrição), corta em 9:16 com legenda dinâmica, zoom e
+crédito, passa por uma fila de aprovação no celular e agenda/publica nas redes (ou entrega tudo pronto para
+você postar). O pacote Python continua se chamando `clipador`.
 
 ## Requisitos
 - Windows 11, Python 3.12, Git Bash.
@@ -84,12 +87,43 @@ redes (nunca o mesmo vídeo em todas as redes no mesmo minuto). A aba **Agenda**
 Limites a lembrar: YouTube gasta 1600 de 10.000 unidades de quota por upload (6/dia); TikTok só publica em
 modo privado até o app passar pela auditoria; Instagram exige conta profissional ligada a uma Página.
 
+## Robustez (Fase 4)
+
+### Painel
+Aba **Painel** da fila: lives agora, clipes por dia e por streamer, taxa de aprovação, latência momento → clipe,
+fila do Whisper, disco, GPU, posts e views por rede, último backup.
+
+### Rodar sozinho e voltar após queda
+```bash
+powershell -ExecutionPolicy Bypass -File scripts\install_autostart.ps1     # tarefa no logon (remova com -Remove)
+scripts\run_forever.bat                                                     # ou só o loop que reinicia se cair
+```
+O estado fica no SQLite, então depois de uma queda o `run` retoma: segmentos não detectados voltam para a fila,
+momentos em edição são renderizados de novo, posts agendados seguem. Backup diário do banco em `data/backups/`
+(7 cópias). Configure o Windows para não suspender na tomada.
+
+### Plano B: captura de tela
+Se o streamlink e o yt-dlp falharem seguidas vezes (ex.: Kick bloqueando), o gravador pode abrir a live num Chrome
+em modo kiosk numa região/monitor e gravar a tela com NVENC (`capture.plan_b`). Precisa de um dispositivo de áudio
+loopback para o som: instale o [VB-Cable](https://vb-audio.com/Cable/) (saída padrão = CABLE Input, capture
+"CABLE Output") ou o `virtual-audio-capturer` do screen-capture-recorder, preencha `plan_b.audio_device` com o nome
+que o `healthcheck` lista e ligue `plan_b.enabled: true`. `force: true` serve para testar sem esperar falha.
+Durante o plano B a tela escolhida fica ocupada pelo player.
+
+### Pedido de remoção
+```bash
+.venv/Scripts/python -m clipador remove --streamer coringa --reason "pediu" [--purge]   # bloqueia e rejeita tudo
+.venv/Scripts/python -m clipador remove --clip 12 [--purge]                            # um clipe só
+```
+O handle vai para `config/blocklist.yaml` e nunca mais é gravado, mesmo com `enabled: true`.
+
 ## Status
 - **Fase 1 (MVP):** implementada e calibrada. Testes: `pytest -q tests`.
 - **Fase 2:** fila de aprovação web, zoom dinâmico, layout facecam, música livre, retenção de rejeitados: implementada.
 - **Fase 3:** agendador anti-spam, publishers (YouTube/TikTok/Instagram/Upload-Post/manual), retries, métricas: implementada
   (APIs testadas com HTTP simulado; falta rodar com contas reais quando existirem).
-- Fase 4 (plano B OBS, métricas em painel, documentação final): ver `CLAUDE.md`.
+- **Fase 4:** painel de métricas, plano B por captura de tela, auto-start/reinício, backup do banco, comando de
+  remoção: implementada. Falta validar 3 lives simultâneas numa noite cheia e o plano B com áudio loopback instalado.
 
 ## Remover um clipe/streamer (pedido do streamer)
 Coloque `enabled: false` no `streamers.yaml` e apague a pasta do clipe em `data/output`. Nada é publicado sem você.

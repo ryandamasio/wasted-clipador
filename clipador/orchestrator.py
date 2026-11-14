@@ -291,7 +291,25 @@ class Orchestrator:
     def retention_loop(self) -> None:
         while not self.stop_event.is_set():
             self.run_retention()
+            self.maybe_backup()
             self.stop_event.wait(1800)
+
+    def maybe_backup(self) -> Path | None:
+        """Backup do SQLite a cada capture.backup_db_hours (padrão 24 h) em data/backups."""
+        hours = float(self.cap.get("backup_db_hours", 24) or 0)
+        if hours <= 0:
+            return None
+        dest = self.cfg.settings.path("data_dir") / "backups"
+        last = self.db.last_backup(dest)
+        if last and time.time() - last.stat().st_mtime < hours * 3600:
+            return None
+        try:
+            out = self.db.backup(dest, keep=7)
+            log.info("backup do banco: %s", out.name)
+            return out
+        except Exception:  # noqa: BLE001
+            log.exception("backup do banco falhou")
+            return None
 
     def run_retention(self) -> int:
         hours = float(self.cap.get("retention_hours", 12))

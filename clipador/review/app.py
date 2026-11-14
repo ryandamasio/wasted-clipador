@@ -85,6 +85,10 @@ def create_app(cfg: Config, db: Database, scheduler=None) -> FastAPI:
         body = await _json(request)
         return svc.mark_posted(clip_id, body.get("platforms"))
 
+    @app.get("/api/metrics")
+    def api_metrics(days: int = 7):
+        return svc.metrics(min(max(days, 1), 90))
+
     @app.get("/api/posts")
     def api_posts(status: str = "scheduled,posting,failed,processing", limit: int = 200):
         return {"posts": svc.list_posts(status, min(max(limit, 1), 500)), "publish": svc.publish_status(), "stats": svc.stats()}

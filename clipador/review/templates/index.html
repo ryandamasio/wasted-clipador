@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f1115">
-<title>{{ profile }} — aprovação</title>
+<title>WASTED · {{ profile }}</title>
 <style>
   :root { --bg:#0f1115; --card:#181b22; --line:#262a33; --txt:#e8eaef; --mut:#8b93a5; --ok:#22c55e; --no:#ef4444; --warn:#f59e0b; --acc:#60a5fa; }
   * { box-sizing:border-box; }
@@ -72,11 +72,23 @@
   .urlrow { grid-column:1 / -1; display:none; gap:8px; }
   .urlrow.on { display:flex; }
   .urlrow input { flex:1; }
+  .kpis { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:12px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px; }
+  .kpi b { display:block; font-size:22px; }
+  .kpi span { font-size:12px; color:var(--mut); }
+  .kpi.warn b { color:var(--warn); } .kpi.bad b { color:var(--no); } .kpi.good b { color:var(--ok); }
+  table.t { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:12px; }
+  table.t th, table.t td { text-align:left; padding:6px 6px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  table.t th { color:var(--mut); font-weight:500; font-size:12px; }
+  .tw { overflow-x:auto; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:4px 8px; margin-bottom:12px; }
+  .sec { font-size:13px; color:var(--mut); margin:14px 0 6px; text-transform:uppercase; letter-spacing:.04em; }
+  .bar { height:6px; background:var(--line); border-radius:3px; overflow:hidden; }
+  .bar i { display:block; height:100%; background:var(--acc); }
 </style>
 </head>
 <body>
 <header>
-  <h1><span>{{ profile }} <small>fila de aprovação</small></span><small id="pend"></small></h1>
+  <h1><span><span style="color:var(--no);letter-spacing:.08em">WASTED</span> <small>{{ profile }} · fila de aprovação</small></span><small id="pend"></small></h1>
   <div class="tabs" id="tabs">
     <button data-s="ready" class="on">Pendentes<b id="n-ready">0</b></button>
     <button data-s="approved">Aprovados<b id="n-approved">0</b></button>
@@ -84,6 +96,7 @@
     <button data-s="agenda">Agenda<b id="n-agenda">0</b></button>
     <button data-s="posted">Postados<b id="n-posted">0</b></button>
     <button data-s="all">Todos</button>
+    <button data-s="painel">Painel</button>
   </div>
 </header>
 <main id="list"><div class="empty">carregando…</div></main>
@@ -112,6 +125,7 @@ async function load() {
       const j = await api(`/api/posts`);
       posts = j.posts; publishInfo = j.publish; renderPosts(); renderStats(j.stats); return;
     }
+    if (status === "painel") { renderMetrics(await api(`/api/metrics?days=7`)); return; }
     const j = await api(`/api/clips?status=${status}`);
     clips = j.clips; render(); renderStats(j.stats);
   } catch (e) { $("#list").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
@@ -158,6 +172,40 @@ function renderPosts() {
   const banner = `<div class="banner">Modo <b>${mode}</b> · ${esc(nets)}<br>Janelas: ${(publishInfo.windows || []).join(", ")}. ${mode === "manual" ? "Poste pelo app da rede no horário sugerido e toque em \"Já postei\"." : "Redes manuais ainda dependem de você."}</div>`;
   if (!posts.length) { el.innerHTML = banner + `<div class="empty">Nada agendado. Aprove clipes para entrar na agenda.</div>`; return; }
   el.innerHTML = banner + posts.map(postCard).join("");
+}
+
+function renderMetrics(m) {
+  const h = m.health, c = m.counts || {};
+  const total = Object.values(c).reduce((a, b) => a + b, 0);
+  const decided = (c.approved || 0) + (c.posted || 0) + (c.rejected || 0);
+  const rate = decided ? Math.round(100 * ((c.approved || 0) + (c.posted || 0)) / decided) : null;
+  const kpi = (v, label, cls = "") => `<div class="kpi ${cls}"><b>${v}</b><span>${label}</span></div>`;
+  const backlog = (h.backlog.to_detect || 0) + (h.backlog.detecting || 0);
+  let html = `<div class="kpis">
+    ${kpi(h.live.length, h.live.length ? "ao vivo: " + h.live.map(l => l.streamer).join(", ") : "nenhuma live agora", h.live.length ? "good" : "")}
+    ${kpi(total, "clipes produzidos")}
+    ${kpi(rate === null ? "–" : rate + "%", "aprovação (" + decided + " decididos)", rate === null ? "" : rate >= 60 ? "good" : "warn")}
+    ${kpi(m.latency && m.latency.n ? m.latency.avg_min + " min" : "–", "momento → clipe (média)", m.latency && m.latency.avg_min > 10 ? "warn" : "good")}
+    ${kpi(backlog, "segmentos na fila do Whisper", backlog > 3 ? "warn" : "")}
+    ${kpi((h.pending.new || 0) + (h.pending.waiting || 0) + (h.pending.editing || 0), "momentos p/ renderizar")}
+    ${kpi(h.disk_free_gb + " GB", "livres em disco (" + h.recordings_gb + " GB de gravações)", h.disk_free_gb < 40 ? "bad" : "")}
+    ${kpi(h.gpu ? h.gpu.util + "%" : "–", h.gpu ? `GPU · ${h.gpu.mem_used}/${h.gpu.mem_total} MB · ${h.gpu.temp}°C` : "GPU indisponível")}
+    ${kpi(h.publish_mode, "publicação · plano B " + (h.plan_b ? "ligado" : "desligado"))}
+  </div>`;
+  html += `<div class="sec">últimos ${m.days} dias</div><div class="tw"><table class="t"><tr><th>dia</th><th>clipes</th><th>aprovados</th><th>rejeitados</th><th>postados</th></tr>`;
+  html += (m.per_day || []).map(d => `<tr><td>${d.day}</td><td>${d.clips}</td><td>${d.approved || 0}</td><td>${d.rejected || 0}</td><td>${d.posted || 0}</td></tr>`).join("") || `<tr><td colspan="5" style="color:var(--mut)">sem clipes no período</td></tr>`;
+  html += `</table></div>`;
+  html += `<div class="sec">por streamer</div><div class="tw"><table class="t"><tr><th>streamer</th><th>lives</th><th>segs</th><th>momentos</th><th>clipes</th><th>✓</th><th>✗</th><th>nota média</th></tr>`;
+  html += (m.per_streamer || []).map(s => `<tr><td>${esc(s.streamer)}</td><td>${s.streams}</td><td>${s.segments}</td><td>${s.moments}</td><td>${s.clips}</td><td>${s.approved || 0}</td><td>${s.rejected || 0}</td><td>${s.avg_score || "–"}</td></tr>`).join("");
+  html += `</table></div>`;
+  html += `<div class="sec">decisões por nota</div><div class="tw"><table class="t"><tr><th>faixa</th><th>aprovados</th><th>rejeitados</th><th>recortes</th><th>taxa</th></tr>`;
+  html += (m.reviews || []).map(r => { const d = r.approved + r.rejected; const pct = d ? Math.round(100 * r.approved / d) : 0;
+    return `<tr><td>${r.band}</td><td>${r.approved}</td><td>${r.rejected}</td><td>${r.recut}</td><td style="min-width:120px"><div class="bar"><i style="width:${pct}%"></i></div>${d ? pct + "%" : ""}</td></tr>`; }).join("") || `<tr><td colspan="5" style="color:var(--mut)">ainda sem decisões</td></tr>`;
+  html += `</table></div>`;
+  html += `<div class="sec">posts</div><div class="tw"><table class="t"><tr><th>rede</th><th>agendados</th><th>postados</th><th>falhos</th><th>views</th><th>likes</th></tr>`;
+  html += (m.posts || []).map(p => { const v = (m.views || {})[p.platform] || {}; return `<tr><td>${NET_NAMES[p.platform] || p.platform}</td><td>${p.scheduled || 0}</td><td>${p.posted || 0}</td><td>${p.failed || 0}</td><td>${v.views ?? "–"}</td><td>${v.likes ?? "–"}</td></tr>`; }).join("") || `<tr><td colspan="6" style="color:var(--mut)">nenhum post ainda</td></tr>`;
+  html += `</table></div><div class="stats">último backup do banco: ${h.last_backup || "nenhum"} · gerado ${m.generated_at}</div>`;
+  $("#list").innerHTML = html;
 }
 
 function renderStats(st) {

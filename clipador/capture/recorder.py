@@ -2,6 +2,8 @@
 
 Pipeline: streamlink --stdout  |  ffmpeg -c copy -f segment
 Fallback:  yt-dlp -o -         |  ffmpeg -c copy -f segment
+Plano B:   navegador em kiosk numa região da tela + ffmpeg gdigrab (+ dshow áudio loopback) -> NVENC -> segmentos
+           (entra sozinho quando streamlink e yt-dlp falham seguidas vezes e capture.plan_b.enabled = true)
 
 Cada segmento finalizado é registrado no banco com timestamp absoluto estimado
 (start_ts = instante em que o ffmpeg começou a receber dados + offset relativo do segmento).
@@ -63,28 +65,70 @@ class Recorder(threading.Thread):
         cmd += [self.streamer.url, str(self.cfg.get("quality", "best"))]
         return cmd
 
+    def _segment_opts(self, run_dir: Path) -> list[str]:
+        return ["-f", "segment", "-segment_time", str(self.segment_seconds), "-segment_format", "mpegts",
+                "-reset_timestamps", "1", "-segment_list", str(run_dir / "segments.csv"), "-segment_list_type", "csv",
+                str(run_dir / "seg_%05d.ts")]
+
     def _ffmpeg_cmd(self, run_dir: Path) -> list[str]:
-        return [
-            "ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
-            "-i", "pipe:0",
-            "-map", "0:v:0", "-map", "0:a:0?",
-            "-c", "copy",
-            "-f", "segment", "-segment_time", str(self.segment_seconds),
-            "-segment_format", "mpegts", "-reset_timestamps", "1",
-            "-segment_list", str(run_dir / "segments.csv"), "-segment_list_type", "csv",
-            str(run_dir / "seg_%05d.ts"),
-        ]
+        return ["ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin", "-i", "pipe:0",
+                "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", *self._segment_opts(run_dir)]
+
+    # ------------------------------------------------------------------ plano B (tela)
+    def plan_b_cfg(self) -> dict:
+        return dict(self.cfg.get("plan_b") or {})
+
+    def _screen_ffmpeg_cmd(self, run_dir: Path) -> list[str]:
+        """Captura a região da tela (gdigrab) + áudio loopback (dshow) e grava com NVENC (fallback libx264)."""
+        pb = self.plan_b_cfg()
+        reg = pb.get("region") or {}
+        x, y = int(reg.get("x", 0)), int(reg.get("y", 0))
+        w, h = int(reg.get("w", 1920)), int(reg.get("h", 1080))
+        fps = int(pb.get("fps", 30))
+        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
+               "-f", "gdigrab", "-framerate", str(fps), "-offset_x", str(x), "-offset_y", str(y), "-video_size", f"{w}x{h}",
+               "-draw_mouse", "0", "-i", "desktop"]
+        audio = pb.get("audio_device")
+        if audio:
+            cmd += ["-f", "dshow", "-thread_queue_size", "1024", "-i", f"audio={audio}"]
+        enc = pb.get("encoder", "h264_nvenc")
+        if enc == "h264_nvenc":
+            cmd += ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "26", "-b:v", str(pb.get("bitrate", "6M")), "-maxrate", "9M",
+                    "-bufsize", "12M", "-g", str(fps * 2), "-pix_fmt", "yuv420p"]
+        else:
+            cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-g", str(fps * 2), "-pix_fmt", "yuv420p"]
+        if audio:
+            cmd += ["-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2"]
+        cmd += self._segment_opts(run_dir)
+        return cmd
+
+    def _browser_cmd(self) -> list[str] | None:
+        pb = self.plan_b_cfg()
+        if not self.browser or not pb.get("open_browser", True):
+            return None
+        reg = pb.get("region") or {}
+        x, y = int(reg.get("x", 0)), int(reg.get("y", 0))
+        w, h = int(reg.get("w", 1920)), int(reg.get("h", 1080))
+        profile = Path(pb.get("profile_dir") or (self.dir.parent.parent / "browser_profile"))
+        profile.mkdir(parents=True, exist_ok=True)
+        url = pb.get("url_override", {}).get(self.streamer.handle) or self.streamer.url
+        return [self.browser, f"--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check", "--kiosk",
+                f"--window-position={x},{y}", f"--window-size={w},{h}", "--autoplay-policy=no-user-gesture-required",
+                "--disable-infobars", "--disable-session-crashed-bubble", url]
 
     # ------------------------------------------------------------------ loop
     def run(self) -> None:
         attempts = 0
         max_attempts = int(self.cfg.get("max_reconnect_attempts", 20))
         delay = float(self.cfg.get("reconnect_delay_seconds", 15))
-        use_ytdlp = False
+        pb = self.plan_b_cfg()
+        plan_b_after = int(pb.get("after_failures", 2))
+        mode = "screen" if (pb.get("enabled") and pb.get("force")) else "streamlink"
+        quick_failures = 0
         status = "ended"
         try:
             while not self.stop_event.is_set():
-                ok = self._record_once(use_ytdlp)
+                ok = self._record_once(mode)
                 if self.stop_event.is_set():
                     break
                 online, _ = check_online(self.streamer.url, self.streamer.platform, self.browser)
@@ -97,32 +141,53 @@ class Recorder(threading.Thread):
                     status = "failed"
                     break
                 if not ok:
-                    use_ytdlp = not use_ytdlp  # alterna fonte quando falha rápido
-                log.warning("[%s] reconectando em %.0fs (tentativa %d, fonte=%s)", self.streamer.handle, delay,
-                            attempts, "yt-dlp" if use_ytdlp else "streamlink")
+                    quick_failures += 1
+                    if mode != "screen" and pb.get("enabled") and quick_failures >= plan_b_after:
+                        log.error("[%s] streamlink e yt-dlp falharam %d vezes: PLANO B (captura de tela)", self.streamer.handle, quick_failures)
+                        mode = "screen"
+                    elif mode != "screen":
+                        mode = "ytdlp" if mode == "streamlink" else "streamlink"   # alterna fonte quando falha rápido
+                else:
+                    quick_failures = 0
+                log.warning("[%s] reconectando em %.0fs (tentativa %d, fonte=%s)", self.streamer.handle, delay, attempts, mode)
                 self.stop_event.wait(delay)
         finally:
             self.db.end_stream(self.stream_id, status)
             log.info("[%s] gravação encerrada (stream_id=%d, %d segmentos)", self.streamer.handle, self.stream_id, self._idx)
 
-    def _record_once(self, use_ytdlp: bool) -> bool:
-        """Roda uma sessão de captura até cair. Retorna True se gravou por tempo razoável."""
+    def _record_once(self, mode: str | bool) -> bool:
+        """Roda uma sessão de captura até cair. Retorna True se gravou por tempo razoável.
+
+        mode: "streamlink" | "ytdlp" | "screen" (bool mantido por compatibilidade: True = ytdlp).
+        """
+        if isinstance(mode, bool):
+            mode = "ytdlp" if mode else "streamlink"
         run_dir = self.dir / f"run_{int(time.time())}"
         run_dir.mkdir(exist_ok=True)
-        src_cmd = self._source_cmd(use_ytdlp)
-        ff_cmd = self._ffmpeg_cmd(run_dir)
-        log.info("[%s] iniciando captura (%s) -> %s", self.streamer.handle, "yt-dlp" if use_ytdlp else "streamlink", run_dir)
         creation = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-        src = subprocess.Popen(src_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation)
-        ff = subprocess.Popen(ff_cmd, stdin=src.stdout, stderr=subprocess.PIPE, creationflags=creation)
-        src.stdout.close()  # ffmpeg é o dono do pipe
-        self._procs = [src, ff]
+        log.info("[%s] iniciando captura (%s) -> %s", self.streamer.handle, mode, run_dir)
+        browser_proc = None
+        if mode == "screen":
+            bcmd = self._browser_cmd()
+            if bcmd:
+                browser_proc = subprocess.Popen(bcmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                time.sleep(float(self.plan_b_cfg().get("browser_warmup_seconds", 12)))  # player abrir e começar a tocar
+            ff = subprocess.Popen(self._screen_ffmpeg_cmd(run_dir), stderr=subprocess.PIPE, creationflags=creation)
+            src = browser_proc or ff
+            self._procs = [p for p in (browser_proc, ff) if p]
+            procs_to_drain = (ff,)
+        else:
+            src_cmd = self._source_cmd(mode == "ytdlp")
+            src = subprocess.Popen(src_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation)
+            ff = subprocess.Popen(self._ffmpeg_cmd(run_dir), stdin=src.stdout, stderr=subprocess.PIPE, creationflags=creation)
+            src.stdout.close()  # ffmpeg é o dono do pipe
+            self._procs = [src, ff]
+            procs_to_drain = (src, ff)
         t0 = time.time()
         started = t0
         csv_path = run_dir / "segments.csv"
         seen = 0
-        err_thread = threading.Thread(target=self._drain_stderr, args=(src, ff), daemon=True)
-        err_thread.start()
+        threading.Thread(target=self._drain_stderr, args=procs_to_drain, daemon=True).start()
         try:
             while not self.stop_event.is_set():
                 seen = self._register_new_segments(csv_path, seen, t0, final=False)
@@ -130,14 +195,14 @@ class Recorder(threading.Thread):
                     break
                 time.sleep(2)
         finally:
-            self._terminate(src, ff)
+            self._terminate(*self._procs)
             time.sleep(1)
             self._register_new_segments(csv_path, seen, t0, final=True)
         duration = time.time() - started
         return duration > 60
 
-    def _drain_stderr(self, src: subprocess.Popen, ff: subprocess.Popen) -> None:
-        for proc, name in ((src, "src"), (ff, "ffmpeg")):
+    def _drain_stderr(self, *procs: subprocess.Popen) -> None:
+        for proc, name in zip(procs, ("src", "ffmpeg") if len(procs) == 2 else ("ffmpeg",)):
             def reader(p=proc, n=name):
                 try:
                     for raw in iter(p.stderr.readline, b""):

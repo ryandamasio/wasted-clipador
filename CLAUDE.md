@@ -1,4 +1,7 @@
-# Clipador — contexto do projeto
+# Clipador ("WASTED") — contexto do projeto
+
+Nome de produto escolhido em 14/11/2026: **WASTED** (tela de morte do GTA). Aparece no README e no cabeçalho da fila
+web; pacote, CLI e banco continuam `clipador`.
 
 Automação de cortes de lives (nicho "Cortes GTA 6") para Windows 11: captura lives (Twitch/Kick/YouTube),
 detecta momentos virais, gera clipes verticais legendados e textos de post. Uso individual (dono: Ryan).
@@ -55,7 +58,10 @@ publish/   base.py (Publisher, PostPayload, PublishResult, PublishError(retryabl
 orchestrator.py  threads monitor/detect/edit/retention/publish + ReviewServer; recover() após queda; 1 Whisper e 1
            encode por vez; auto-aprovação por nota (review.auto_approve_min_score) agenda posts; MediaNotReady
            com live encerrada -> failed
-__main__.py      CLI (run, check, process-file, record, status, review, publish {status,list,schedule,run,now,auth,metrics}, healthcheck)
+__main__.py      CLI (run, check, process-file, record, status, review, publish {status,list,schedule,run,now,auth,metrics},
+           remove {--streamer|--clip} [--purge], healthcheck)
+scripts/   calibrate.py (notas offline), run_forever.bat (loop de reinício), install_autostart.ps1 (tarefa no logon)
+config/blocklist.yaml  streamers bloqueados (criado pelo `remove`)
 ```
 Posts: `scheduled -> posting -> posted` (`processing` quando a plataforma ainda processa; `failed` após esgotar
 retries ou erro definitivo; `skipped` = pulado/cancelado). Rede manual: fica `scheduled` até o dono marcar na Agenda.
@@ -99,7 +105,14 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   interface marcou o post. Para ligar o automático: preencher .env, `publish auth youtube|tiktok`, `publish.mode: auto`.
   Automação do amigo do dono continua desconhecida (se for ferramenta pronta, `via: upload-post` é o caminho rápido).
   Nota: live do Gaules em 14/11 06:05 gerou clipe real nota 71 em 2 min (áudio+fala+"morri") sem chat no rerun.
-- Fase 4: plano B OBS, 3 lives simultâneas estáveis, auto-aprovação, métricas.
+- Fase 4: CONCLUÍDA em 14/11/2026. Plano B = captura de tela (recorder: modo "screen" com Chrome kiosk em
+  `capture.plan_b.region` + ffmpeg gdigrab + dshow loopback + NVENC, entra após `after_failures` falhas rápidas de
+  streamlink/yt-dlp; testado gdigrab+NVENC gerando segmentos; falta áudio loopback na máquina: só "Microphone").
+  Painel (/api/metrics + aba Painel), backup SQLite (db.backup, a cada capture.backup_db_hours em data/backups),
+  scripts/run_forever.bat + scripts/install_autostart.ps1 (schtasks ONLOGON "Clipador"), `clipador remove
+  --streamer|--clip [--purge]` com config/blocklist.yaml (Config.enabled_streamers ignora bloqueados), healthcheck
+  lista dispositivos dshow, plano B, backup e tarefa de auto-start. 36 testes. NÃO validado: 3 lives simultâneas
+  numa noite cheia (só observabilidade pronta no Painel: fila do Whisper e latência).
 
 ## Decisões registradas
 - Streamers iniciais por pesquisa (Streams Charts 2025): Coringa (Kick, nº1 em GTA BR), PaulinhoLOKObr, Gaules,

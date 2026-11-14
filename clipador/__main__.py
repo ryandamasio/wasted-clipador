@@ -290,6 +290,43 @@ def cmd_publish(args, cfg) -> int:
     return 2
 
 
+def cmd_remove(args, cfg) -> int:
+    """Pedido de remoção: bloqueia um streamer (ou rejeita um clipe), cancela posts e, com --purge, apaga as pastas."""
+    import shutil
+
+    db = _db(cfg)
+    out_root = cfg.settings.path("output_dir").resolve()
+    if args.clip:
+        clip = db.get_clip(args.clip)
+        if not clip:
+            print("clipe não existe"); return 2
+        db.set_clip_status(args.clip, "rejected", "removido a pedido")
+        db.update("moments", clip["moment_id"], status="rejected")
+        db.execute("UPDATE posts SET status='skipped', error='removido a pedido' WHERE clip_id=? AND status IN ('scheduled','failed','posting')", [args.clip])
+        d = Path(clip["path"]).parent
+        if args.purge and d.exists() and out_root in d.resolve().parents:
+            shutil.rmtree(d, ignore_errors=True)
+            db.update("clips", args.clip, status="purged")
+        print(f"clipe {args.clip} removido ({'pasta apagada' if args.purge else 'pasta mantida: ' + str(d)})")
+        return 0
+    handle = args.streamer.lower()
+    cfg.block_streamer(handle, args.reason or "")
+    res = db.remove_streamer_data(handle)
+    purged = 0
+    if args.purge:
+        for d in res["dirs"]:
+            p = Path(d)
+            if p.exists() and out_root in p.resolve().parents:
+                shutil.rmtree(p, ignore_errors=True)
+                purged += 1
+        db.execute("""UPDATE clips SET status='purged' WHERE id IN (SELECT c.id FROM clips c JOIN moments m ON m.id=c.moment_id
+                      JOIN streams s ON s.id=m.stream_id WHERE s.streamer=?)""", [handle])
+    print(f"streamer '{handle}' bloqueado em {cfg.blocklist_path().name}; {res['clips']} clipe(s) rejeitados, posts cancelados"
+          + (f", {purged} pasta(s) apagadas" if args.purge else f"; pastas mantidas ({len(res['dirs'])}). Use --purge para apagar"))
+    print("Se o `clipador run` estiver rodando, reinicie para parar a gravação desse streamer.")
+    return 0
+
+
 def cmd_status(args, cfg) -> int:
     db = _db(cfg)
     print("Tabelas:", json.dumps(db.stats()))
@@ -357,6 +394,26 @@ def cmd_healthcheck(args, cfg) -> int:
     print(f"  [{'AVISO' if missing else 'INFO'}] música livre: {len(tracks)} faixa(s) em {mdir.name}"
           + (f"; SEM registro em LICENSES.md: {missing}" if missing else "") + ("" if tracks else " (clip_youtube.mp4 não será gerado)"))
     print(f"  [INFO] fila de aprovação: http://{_lan_ip()}:{cfg.settings.get('review.port', 8787)} quando `run`/`review` estiver ativo")
+    # plano B (captura de tela): dispositivos de áudio dshow disponíveis
+    pb = cfg.settings.get("capture.plan_b", {}) or {}
+    try:
+        dev = subprocess.run(["ffmpeg", "-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy"], capture_output=True, text=True, timeout=20).stderr
+        audio_devs = [ln.split('"')[1] for ln in dev.splitlines() if "(audio)" in ln and '"' in ln]
+    except Exception:  # noqa: BLE001
+        audio_devs = []
+    want = pb.get("audio_device") or ""
+    loop_ok = want and any(want.lower() in d.lower() for d in audio_devs)
+    state = "desligado" if not pb.get("enabled") else ("OK" if loop_ok else "SEM ÁUDIO LOOPBACK")
+    print(f"  [{'OK' if (not pb.get('enabled') or loop_ok) else 'AVISO'}] plano B (tela): {state}; dispositivos de áudio: {audio_devs or 'nenhum'}"
+          + ("" if loop_ok or not pb.get("enabled") else " -> instale VB-Cable ou screen-capture-recorder e preencha capture.plan_b.audio_device"))
+    blocked = cfg.blocklist()
+    if blocked:
+        print(f"  [INFO] streamers bloqueados: {sorted(blocked)}")
+    backups = cfg.settings.path("data_dir") / "backups"
+    last = Database(cfg.settings.path("db_path")).last_backup(backups)
+    print(f"  [{'OK' if last else 'INFO'}] backup do banco: {time.strftime('%d/%m %H:%M', time.localtime(last.stat().st_mtime)) if last else 'ainda nenhum (feito pelo run a cada ' + str(cfg.settings.get('capture.backup_db_hours', 24)) + ' h)'}")
+    task = subprocess.run(["schtasks", "/Query", "/TN", "Clipador"], capture_output=True, text=True).returncode == 0
+    print(f"  [{'OK' if task else 'INFO'}] auto-start no logon: {'tarefa Clipador instalada' if task else 'não instalado (scripts/install_autostart.ps1)'}")
     if args.whisper:
         from clipador.detect.transcribe import Transcriber
         import numpy as np
@@ -402,6 +459,10 @@ def main(argv=None) -> int:
     pn = pbs.add_parser("now"); pn.add_argument("--post", type=int, required=True)
     pa = pbs.add_parser("auth"); pa.add_argument("network", choices=["youtube", "tiktok"])
     pbs.add_parser("metrics")
+    rm = sub.add_parser("remove", help="pedido de remoção: bloqueia streamer ou rejeita clipe (+ --purge apaga pastas)")
+    g = rm.add_mutually_exclusive_group(required=True)
+    g.add_argument("--streamer"); g.add_argument("--clip", type=int)
+    rm.add_argument("--purge", action="store_true"); rm.add_argument("--reason")
     h = sub.add_parser("healthcheck")
     h.add_argument("--whisper", action="store_true", help="também carrega o Whisper na GPU")
     args = p.parse_args(argv)
@@ -409,7 +470,8 @@ def main(argv=None) -> int:
     cfg = load_config()
     setup_logging(cfg.settings.path("logs_dir"), logging.DEBUG if args.verbose else logging.INFO)
     return {"run": cmd_run, "check": cmd_check, "process-file": cmd_process_file, "record": cmd_record,
-            "status": cmd_status, "review": cmd_review, "publish": cmd_publish, "healthcheck": cmd_healthcheck}[args.cmd](args, cfg)
+            "status": cmd_status, "review": cmd_review, "publish": cmd_publish, "remove": cmd_remove,
+            "healthcheck": cmd_healthcheck}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

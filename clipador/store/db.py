@@ -367,6 +367,43 @@ class Database:
         return {r["status"]: int(r["n"]) for r in self.fetchall("SELECT status, COUNT(*) AS n FROM posts GROUP BY status")}
 
     # --- manutenção ----------------------------------------------------------
+    def backup(self, dest_dir: Path, keep: int = 7) -> Path:
+        """Cópia consistente do banco (API de backup do SQLite) em dest_dir; mantém as `keep` mais recentes."""
+        dest_dir = Path(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        out = dest_dir / f"clipador_{stamp}.sqlite"
+        n = 1
+        while out.exists():
+            out = dest_dir / f"clipador_{stamp}_{n}.sqlite"
+            n += 1
+        dst = sqlite3.connect(out)
+        try:
+            self.conn().backup(dst)
+        finally:
+            dst.close()
+        olds = sorted(dest_dir.glob("clipador_*.sqlite"))
+        for p in olds[:-keep] if keep > 0 else []:
+            p.unlink(missing_ok=True)
+        return out
+
+    def last_backup(self, dest_dir: Path) -> Path | None:
+        olds = sorted(Path(dest_dir).glob("clipador_*.sqlite")) if Path(dest_dir).exists() else []
+        return olds[-1] if olds else None
+
+    def remove_streamer_data(self, handle: str) -> dict:
+        """Rejeita clipes e cancela posts de um streamer (pedido de remoção). Retorna contagens e pastas afetadas."""
+        clips = self.fetchall(
+            """SELECT c.* FROM clips c JOIN moments m ON m.id = c.moment_id JOIN streams s ON s.id = m.stream_id WHERE s.streamer = ?""", [handle])
+        dirs = []
+        for c in clips:
+            if c["status"] not in ("purged",):
+                self.update("clips", c["id"], status="rejected", review_note="removido a pedido", reviewed_at=time.time())
+            self.execute("UPDATE posts SET status='skipped', error='removido a pedido' WHERE clip_id=? AND status IN ('scheduled','failed','posting')", [c["id"]])
+            dirs.append(str(Path(c["path"]).parent))
+        self.execute("""UPDATE moments SET status='rejected' WHERE status IN ('new','waiting_media','clipped')
+                        AND stream_id IN (SELECT id FROM streams WHERE streamer=?)""", [handle])
+        return {"clips": len(clips), "dirs": sorted(set(dirs))}
     def stats(self) -> dict:
         out = {}
         for table in ("streams", "segments", "chat_messages", "moments", "clips", "posts"):
