@@ -14,7 +14,7 @@ capture:
   max_concurrent: 3                # lives gravadas ao mesmo tempo
   segment_seconds: 120             # tamanho de cada arquivo de gravação (menor = clipe pronto mais rápido)
   quality: "best"                  # qualidade do streamlink
-  chat_offset_seconds: 10          # atraso médio do vídeo capturado em relação ao chat (ajuste após testar)
+  chat_offset_seconds: 7           # atraso médio da reação do chat em relação ao vídeo capturado (calibrado 14/11)
   reconnect_delay_seconds: 15
   max_reconnect_attempts: 20
   twitch_disable_ads: true
@@ -27,16 +27,17 @@ capture:
 detect:
   window_seconds: 8                # janela deslizante de pontuação
   step_seconds: 1
-  min_score: 55                    # nota mínima (0-100) para virar momento
+  min_score: 50                    # nota mínima (0-100) para virar momento (calibrado 14/11: p99 de lives calmas ~45)
   max_moments_per_segment: 3
   min_gap_seconds: 45              # distância mínima entre picos
   weights:                         # soma = 1.0
-    chat: 0.45
-    audio: 0.25
+    chat: 0.50
+    audio: 0.20
     transcript: 0.15
     keywords: 0.15
   chat:
     baseline_minutes: 10           # média móvel para comparar a velocidade do chat
+    min_burst_rate: 1.5            # msgs/s (suavizado em 5 s) para uma rajada contar como explosão total; chats grandes passam fácil
     hype_tokens: ["kkk", "kkkk", "kkkkk", "hahaha", "????", "?????", "pqp", "caralho", "mano", "nao acredito", "não acredito", "que isso", "meu deus", "mds", "nossa", "lul", "kekw", "omegalul", "pog", "pogchamp", "lets go", "vamo", "insano", "brabo", "bugou", "rip", "clip", "clipa", "clipem", "clipador", "momento", "lendario", "lendário", "absurdo", "gg", "ez"]
   audio:
     rms_window_seconds: 0.5
@@ -96,7 +97,8 @@ detect:
     - wasted
     - estrela
     - procurado
-  blocklist_words: ["estupr", "nazis", "hitler", "viado", "macaco", "preto fedido", "retardad", "suicid", "se mata"]   # penaliza/filtra conteúdo problemático
+  blocklist_words: ["estupr", "nazis", "hitler", "viado", "macaco", "preto fedido", "retardad", "suicid", "se mata"]   # nota x0.4: conteúdo problemático
+  sensitive_words: ["aborto", "bolsonaro", "lula", "política", "politica", "religião", "religiao", "pedof", "racis", "homofob", "transfob"]   # nota x0.7: temas que podem prejudicar o streamer
   llm:
     enabled: false                 # requer ANTHROPIC_API_KEY no .env
     model: "claude-haiku-5-5"

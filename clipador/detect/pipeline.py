@@ -99,7 +99,8 @@ class Detector:
                 base_rate = len(messages) / max(total, 1)
                 base_std = base_rate * 0.6
             chat_sig, chat_info = sig.chat_signal(messages, seg_chat_start, total, base_rate, base_std,
-                                                  self.d.get("chat", {}).get("hype_tokens", []))
+                                                  self.d.get("chat", {}).get("hype_tokens", []),
+                                                  float(self.d.get("chat", {}).get("min_burst_rate", 2.0)))
 
         # --- transcrição
         transcript = self.transcribe_segment(segment, audio)
@@ -119,6 +120,10 @@ class Detector:
         if blocked:
             score = score * 0.4
             log.warning("segmento %d com termos bloqueados %s: nota reduzida", seg_id, blocked)
+        sensitive = sig.blocklist_hits(transcript, messages, self.d.get("sensitive_words", []))
+        if sensitive:
+            score = score * 0.7
+            log.info("segmento %d com tema sensível %s: nota reduzida", seg_id, sensitive)
 
         peaks = pick_peaks(score, float(self.d.get("min_score", 55)), int(self.d.get("min_gap_seconds", 45)),
                            int(self.d.get("max_moments_per_segment", 3)))
@@ -148,6 +153,7 @@ class Detector:
                 "chat_info": chat_info,
                 "weights": {k: round(v, 2) for k, v in eff_weights.items()},
                 "blocked": blocked,
+                "sensitive": sensitive,
             }
             final_score = float(score[p])
             if self.llm.enabled and final_score >= float(self.d.get("llm", {}).get("min_score_to_call", 40)):

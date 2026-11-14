@@ -54,7 +54,11 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, cover.jpg, su
   int8_float16 transcreve 120 s em 4-6 s na GTX 1660. Teste real (`record` 6 min do Gaules): captura, segmentos,
   chat IRC e detecção OK (sem momentos: rerun calmo, chat vazio). Teste `process-file` num vídeo de 4 min:
   clipe 1080x1920 renderizado com NVENC em 19 s, legenda/crédito corretos (ver data/output/2026-11-14).
-  Pendente de calibração: `min_score`/pesos só podem ser ajustados com uma live movimentada com chat.
+  Calibração inicial (14/11, lives calmas: Gaules rerun, Brederodess/Tibia 3,5k viewers, 91 msgs/10 min):
+  p99 das notas por segundo ~45 -> `min_score` 50, pesos chat .50/audio .20/transcript .15/keywords .15,
+  `chat_offset_seconds` 7, piso de rajada `min_burst_rate` 1.5 msg/s, lista `sensitive_words` (x0.7).
+  Com esses valores nenhuma das lives calmas gera clipe (correto). FALTA validar numa live movimentada
+  (Coringa/GTA) e rever: `scripts/calibrate.py --stream N` recalcula tudo offline a partir do cache.
 - Fase 2: zoom dinâmico, facecam split, música livre (YouTube), fila de aprovação web, retenção já existe (básica).
 - Fase 3: publicação automática (`publish/`), agendador anti-spam. Candidatos: Upload-Post API (via OpenShorts),
   APIs oficiais (YouTube Data v3, Instagram Graph, TikTok Content Posting). Automação do amigo do dono: desconhecida.

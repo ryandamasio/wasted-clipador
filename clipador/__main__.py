@@ -128,9 +128,16 @@ def cmd_record(args, cfg) -> int:
     from clipador.capture.recorder import Recorder
     from clipador.orchestrator import Orchestrator
 
+    from clipador.config import Streamer
+
     streamer = cfg.streamer(args.streamer)
+    if not streamer and args.url:
+        # streamer ad hoc (calibração/teste): plataforma deduzida da URL
+        platform = "kick" if "kick.com" in args.url else "youtube" if "youtu" in args.url else "twitch"
+        streamer = Streamer(name=args.streamer, handle=args.streamer, platform=platform, url=args.url)
+        cfg.streamers.append(streamer)
     if not streamer:
-        print(f"streamer '{args.streamer}' não está em config/streamers.yaml", file=sys.stderr)
+        print(f"streamer '{args.streamer}' não está em config/streamers.yaml (use --url para ad hoc)", file=sys.stderr)
         return 2
     if args.url:
         streamer.url = args.url

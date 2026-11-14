@@ -29,7 +29,7 @@ def _sigmoid(x: float) -> float:
 
 
 def chat_signal(messages: list[dict], seg_start_chat: float, total_seconds: int, baseline_rate: float,
-                baseline_std: float, hype_tokens: list[str]) -> tuple[np.ndarray, dict]:
+                baseline_std: float, hype_tokens: list[str], min_burst_rate: float = 2.0) -> tuple[np.ndarray, dict]:
     """messages: já filtradas no intervalo do segmento (ts em tempo de chat).
 
     seg_start_chat = segment.start_ts - chat_offset.
@@ -54,8 +54,10 @@ def chat_signal(messages: list[dict], seg_start_chat: float, total_seconds: int,
     for i in range(total_seconds):
         z = (rate_s[i] - base) / std
         hype_frac = hype_s[i] / rate_s[i] if rate_s[i] > 0 else 0.0
-        # z alto = pico de velocidade; hype_frac alto = muita risada/espanto
-        signal[i] = 0.7 * _sigmoid((z - 1.5) * 1.5) + 0.3 * min(1.0, hype_frac * 2.0)
+        # z alto = pico de velocidade; hype_frac alto = muita risada/espanto.
+        # abs_factor evita que 3-4 mensagens num chat quase parado contem como explosão.
+        abs_factor = min(1.0, rate_s[i] / max(min_burst_rate, 1e-6))
+        signal[i] = abs_factor * (0.7 * _sigmoid((z - 1.5) * 1.5) + 0.3 * min(1.0, hype_frac * 2.0))
     info = {"messages": len(messages), "baseline_rate": round(base, 3), "peak_rate": round(float(rate_s.max()) if total_seconds else 0, 3)}
     return signal, info
 
@@ -95,7 +97,7 @@ def keyword_signal(transcript: Transcript, keywords: list[str], total_seconds: i
     for i, w in enumerate(words):
         chunk = _norm(" ".join(x.text for x in words[i:i + 3]))
         for nk, orig in kws:
-            if chunk.startswith(nk) or (" " not in nk and nk in _norm(w.text)):
+            if chunk.startswith(nk + " ") or chunk == nk or (" " not in nk and _norm(w.text).startswith(nk)):
                 sec = int(w.start)
                 if 0 <= sec < total_seconds:
                     lo, hi = max(0, sec - 1), min(total_seconds, sec + 4)
