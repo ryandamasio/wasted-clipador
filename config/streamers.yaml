@@ -23,13 +23,13 @@ streamers:
     display: "@loud_coringa"
     channel_link: https://kick.com/coringa
     enabled: true
-    facecam: null
+    facecam: {x: 0.0, y: 0.0, w: 0.25, h: 0.27}   # medido em 14/11 (VOD GTA RP): câmera no canto superior esquerdo
     chat_offset_seconds: null
 
   - name: PaulinhoLOKObr
     handle: paulinholokobr
     platform: kick
-    url: https://kick.com/paulinholokobr    # TODO confirmar handle
+    url: https://kick.com/paulinholokobr    # confirmado 14/11: 321 mil seguidores, GTA RP quase todo dia
     priority: 2
     display: "@paulinholokobr"
     channel_link: https://kick.com/paulinholokobr
@@ -45,7 +45,7 @@ streamers:
     display: "@gaules"
     channel_link: https://www.twitch.tv/gaules
     enabled: true
-    facecam: null
+    facecam: {x: 0.005, y: 0.42, w: 0.19, h: 0.19}   # medido em 14/11 (rerun CS2): câmera à esquerda, meio da tela
     chat_offset_seconds: null
 
   - name: Baiano
@@ -56,7 +56,7 @@ streamers:
     display: "@baiano"
     channel_link: https://www.twitch.tv/baiano
     enabled: true
-    facecam: null
+    facecam: {x: 0.845, y: 0.593, w: 0.112, h: 0.148}   # medido em 14/11 num evento (Worlds): cam pequena no canto inferior direito; conferir em dia de gameplay
     chat_offset_seconds: null
 
   - name: Alanzoka
@@ -84,11 +84,11 @@ streamers:
   - name: Davy Jones
     handle: davyjones
     platform: youtube
-    url: https://www.youtube.com/@DavyJones/live    # TODO confirmar canal (o pedido dizia "David Jones")
+    url: https://www.youtube.com/@livesdodavyjonesoficial1430/live    # canal de lives do Davy Jones (Gameplayrj), confirmado 14/11
     priority: 4
-    display: "@DavyJones"
-    channel_link: https://www.youtube.com/@DavyJones
-    enabled: false
+    display: "@Gameplayrj"
+    channel_link: https://www.youtube.com/@Gameplayrj
+    enabled: true
     facecam: null
     chat_offset_seconds: null
 

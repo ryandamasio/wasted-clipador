@@ -2,24 +2,31 @@
 # Uso (PowerShell, na pasta do projeto):
 #   powershell -ExecutionPolicy Bypass -File scripts\install_autostart.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts\install_autostart.ps1 -Remove
-param([switch]$Remove)
+#   powershell -ExecutionPolicy Bypass -File scripts\install_autostart.ps1 -StartNow
+param([switch]$Remove, [switch]$StartNow)
 
 $taskName = "Clipador"
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $bat = Join-Path $root "scripts\run_forever.bat"
 
 if ($Remove) {
-    schtasks /Delete /TN $taskName /F | Out-Null
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
     Write-Host "Tarefa '$taskName' removida."
     exit 0
 }
 
 if (-not (Test-Path $bat)) { Write-Error "não achei $bat"; exit 1 }
 
-# /SC ONLOGON: ao entrar no Windows; /RL LIMITED: sem admin; janela mínima via cmd /c start /min
-$cmd = "cmd.exe /c start `"Clipador`" /min `"$bat`""
-schtasks /Create /TN $taskName /TR $cmd /SC ONLOGON /RL LIMITED /F | Out-Null
-if ($LASTEXITCODE -ne 0) { Write-Error "schtasks falhou"; exit 1 }
+# cmd /c start "Clipador" /min "<bat>"  -> janela minimizada; sem admin; só no logon deste usuário
+$action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument ('/c start "Clipador" /min "' + $bat + '"') -WorkingDirectory $root
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
 Write-Host "Tarefa '$taskName' instalada: o Clipador sobe sozinho no próximo logon."
 Write-Host "Para evitar que o PC durma com live rodando: Configurações > Sistema > Energia > Suspender: Nunca (na tomada)."
-Write-Host "Para iniciar agora sem reiniciar: schtasks /Run /TN $taskName"
+if ($StartNow) {
+    Start-ScheduledTask -TaskName $taskName
+    Write-Host "Tarefa iniciada agora (janela minimizada 'Clipador')."
+} else {
+    Write-Host "Para iniciar agora sem reiniciar: Start-ScheduledTask -TaskName $taskName"
+}
