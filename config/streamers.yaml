@@ -74,10 +74,10 @@ streamers:
     handle: casimito
     platform: twitch
     url: https://www.twitch.tv/casimito
-    priority: 4
+    priority: 2
     display: "@casimito"
     channel_link: https://www.twitch.tv/casimito
-    enabled: false
+    enabled: true
     facecam: null
     chat_offset_seconds: null
 
@@ -100,5 +100,106 @@ streamers:
     display: "@pedro"
     channel_link: https://www.twitch.tv/pedro
     enabled: false
+    facecam: null
+    chat_offset_seconds: null
+
+  # --- adicionados em 15/11/2026 (verificados; ranking Streams Charts 2025 + Twitch BR 2026) ---
+
+  - name: Cellbit
+    handle: cellbit
+    platform: twitch
+    url: https://www.twitch.tv/cellbit
+    priority: 2
+    display: "@cellbit"
+    channel_link: https://www.twitch.tv/cellbit
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: Felps
+    handle: felps
+    platform: twitch
+    url: https://www.twitch.tv/felps
+    priority: 3
+    display: "@felps"
+    channel_link: https://www.twitch.tv/felps
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: JonVlogs
+    handle: jonvlogs
+    platform: twitch
+    url: https://www.twitch.tv/jonvlogs
+    priority: 3
+    display: "@jonvlogs"
+    channel_link: https://www.twitch.tv/jonvlogs
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: Gabepeixe
+    handle: gabepeixe
+    platform: twitch
+    url: https://www.twitch.tv/gabepeixe
+    priority: 4
+    display: "@gabepeixe"
+    channel_link: https://www.twitch.tv/gabepeixe
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: LuquEt4
+    handle: luquet4
+    platform: twitch
+    url: https://www.twitch.tv/luquet4
+    priority: 4
+    display: "@luquet4"
+    channel_link: https://www.twitch.tv/luquet4
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: YoDa
+    handle: yoda
+    platform: twitch
+    url: https://www.twitch.tv/yoda
+    priority: 4
+    display: "@yoda"
+    channel_link: https://www.twitch.tv/yoda
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: Rakin
+    handle: rakin
+    platform: twitch
+    url: https://www.twitch.tv/rakin
+    priority: 4
+    display: "@rakin"
+    channel_link: https://www.twitch.tv/rakin
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: TcK10
+    handle: tck10
+    platform: twitch
+    url: https://www.twitch.tv/tck10
+    priority: 5
+    display: "@tck10"
+    channel_link: https://www.twitch.tv/tck10
+    enabled: true
+    facecam: null
+    chat_offset_seconds: null
+
+  - name: BRKsEDU
+    handle: brksedu
+    platform: youtube
+    url: https://www.youtube.com/@brksedu/live    # lives raras; Twitch dele está parada desde 2026 (Social Blade)
+    priority: 4
+    display: "@BRKsEDU"
+    channel_link: https://www.youtube.com/@brksedu
+    enabled: true
     facecam: null
     chat_offset_seconds: null

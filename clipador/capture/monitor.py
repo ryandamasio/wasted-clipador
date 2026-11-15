@@ -56,6 +56,8 @@ def _session(browser: str | None):
 
 def check_online(url: str, platform: str, browser: str | None, timeout: int = 45) -> tuple[bool, str | None]:
     """Retorna (online, título). Usa streamlink; cai para yt-dlp se o plugin falhar."""
+    if url.startswith("file:"):  # live falsa (teste de carga)
+        return Path(url.split(":", 1)[1].lstrip("/")).exists(), "arquivo (teste)"
     try:
         session = _session(browser)
         plugin_name, plugin_cls, resolved = session.resolve_url(url)

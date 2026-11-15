@@ -49,6 +49,11 @@ class Recorder(threading.Thread):
 
     # ------------------------------------------------------------------ cmds
     def _source_cmd(self, use_ytdlp: bool) -> list[str]:
+        if self.streamer.url.startswith("file:"):
+            # "live" falsa a partir de arquivo (teste de carga): reproduz em tempo real, em loop
+            path = self.streamer.url.split(":", 1)[1].lstrip("/")
+            return ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-re", "-stream_loop", "-1", "-i", path,
+                    "-c", "copy", "-f", "mpegts", "pipe:1"]
         if use_ytdlp:
             return [*ytdlp_cmd(), "--quiet", "--no-warnings", "--no-part", "--hls-use-mpegts", "-o", "-",
                     "-f", "best", self.streamer.url]
@@ -59,7 +64,7 @@ class Recorder(threading.Thread):
             cmd.append("--twitch-low-latency")
         if self.streamer.platform == "kick":
             if self.browser:
-                cmd += ["--webbrowser-executable", self.browser, "--webbrowser-headless"]
+                cmd += ["--webbrowser-executable", self.browser, "--webbrowser-headless=true"]
             if self.cfg.get("kick_low_latency"):
                 cmd.append("--kick-low-latency")
         cmd += [self.streamer.url, str(self.cfg.get("quality", "best"))]

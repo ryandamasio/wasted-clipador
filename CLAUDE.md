@@ -121,6 +121,13 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   Agenda usam para a rede), `detect.min_score_no_chat: 62` e `max_moments_per_hour: 6` (final do Worlds no Baiano
   gerou 16 clipes/h). Atalho WASTED.url na área de trabalho.
 
+- 15/11: BUG corrigido na Kick: `--webbrowser-headless` sem `=true` fazia o streamlink engolir a URL (gravação na Kick
+  nunca teria funcionado). VOD da Kick lê pelo yt-dlp (fallback validado: segmentos 1080p). Plugin Kick do streamlink
+  ainda sem validação com live real (todos offline nos testes). 9 streamers novos verificados por metadados
+  (Cellbit, Felps, JonVlogs, Gabepeixe, LuquEt4, YoDa, Rakin, TcK10, BRKsEDU no YouTube); Casimiro habilitado;
+  `capture.check_workers: 6`. `scripts/stress.py` = teste de carga com lives falsas (url `file:` no Recorder).
+  Dono NÃO quer som saindo do PC: nunca abrir Twitch/Kick no navegador embutido (ver memória).
+
 ## Decisões registradas
 - Streamers iniciais por pesquisa (Streams Charts 2025): Coringa (Kick, nº1 em GTA BR), PaulinhoLOKObr, Gaules,
   Baiano, Alanzoka. "David Jones" do pedido provavelmente é Davy Jones (Gameplayrj), desabilitado até confirmar.

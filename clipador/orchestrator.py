@@ -135,7 +135,7 @@ class Orchestrator:
     # --------------------------------------------------------------- monitor
     def monitor_loop(self) -> None:
         interval = float(self.cap.get("poll_interval_seconds", 60))
-        pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="online-check")
+        pool = ThreadPoolExecutor(max_workers=int(self.cap.get("check_workers", 6)), thread_name_prefix="online-check")
         while not self.stop_event.is_set():
             self._reap_recorders()
             self._check_disk()

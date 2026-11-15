@@ -50,6 +50,22 @@ def test_remove_streamer_data_and_metrics_api(tmp_path):
     assert db.posts_for_clip(cid)[0]["status"] == "skipped"
 
 
+def test_source_commands_kick_headless_flag_and_file_live(tmp_path):
+    db = Database(tmp_path / "t.sqlite")
+    kick = Streamer(name="C", handle="c", platform="kick", url="https://kick.com/c")
+    rec = Recorder(db, kick, {"segment_seconds": 120}, tmp_path / "rec", browser="C:/chrome.exe")
+    cmd = rec._source_cmd(False)
+    # streamlink 8 exige valor explícito; sem "=true" ele engolia a URL como valor da flag
+    assert "--webbrowser-headless=true" in cmd and cmd[-2:] == ["https://kick.com/c", "best"]
+    fake = Streamer(name="F", handle="f", platform="twitch", url="file:///D:/x/src.ts")
+    rec2 = Recorder(db, fake, {"segment_seconds": 120}, tmp_path / "rec", browser=None)
+    cmd2 = rec2._source_cmd(False)
+    assert cmd2[0] == "ffmpeg" and "-re" in cmd2 and "D:/x/src.ts" in cmd2 and cmd2[-1] == "pipe:1"
+    from clipador.capture.monitor import check_online
+    assert check_online("file:///" + str(tmp_path / "nope.ts").replace("\\", "/"), "twitch", None) == (False, "arquivo (teste)")
+    db.close()
+
+
 def test_screen_capture_commands(tmp_path):
     db = Database(tmp_path / "t.sqlite")
     s = Streamer(name="X", handle="x", platform="kick", url="https://kick.com/x")

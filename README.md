@@ -112,6 +112,14 @@ loopback para o som: instale o [VB-Cable](https://vb-audio.com/Cable/) (saída p
 que o `healthcheck` lista e ligue `plan_b.enabled: true`. `force: true` serve para testar sem esperar falha.
 Durante o plano B a tela escolhida fica ocupada pelo player.
 
+### Teste de carga (3 lives ao mesmo tempo)
+```bash
+.venv/Scripts/python scripts/stress.py --minutes 8 --lives 3
+```
+Monta 3 "lives" a partir de gravações antigas (reproduzidas em tempo real), roda detecção e edição de verdade em
+banco e pastas separados (`data/stress_*`) e imprime a fila do Whisper, latência e uso de GPU. Pare o `run` antes,
+para a medição não dividir a GPU com as lives reais.
+
 ### Pedido de remoção
 ```bash
 .venv/Scripts/python -m clipador remove --streamer coringa --reason "pediu" [--purge]   # bloqueia e rejeita tudo
