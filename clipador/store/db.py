@@ -123,6 +123,7 @@ MIGRATIONS = [
     ("posts", "metrics_json", "TEXT"),
     ("posts", "metrics_at", "REAL"),
     ("posts", "created_at", "REAL"),
+    ("clips", "long_path", "TEXT"),       # versão > 1 min (TikTok)
 ]
 
 
@@ -263,13 +264,14 @@ class Database:
     # --- clips -------------------------------------------------------------
     def add_clip(self, moment_id: int, path: Path, cover_path: Path | None, post_path: Path | None,
                  duration: float, title: str, copy_data: dict, music_path: Path | None = None,
-                 render_info: dict | None = None) -> int:
+                 render_info: dict | None = None, long_path: Path | None = None) -> int:
         return self.insert("clips", moment_id=moment_id, path=str(path),
                            cover_path=str(cover_path) if cover_path else None,
                            post_path=str(post_path) if post_path else None, duration=duration, title=title,
                            copy_json=json.dumps(copy_data, ensure_ascii=False), status="ready", created_at=time.time(),
                            music_path=str(music_path) if music_path else None,
-                           render_json=json.dumps(render_info or {}, ensure_ascii=False))
+                           render_json=json.dumps(render_info or {}, ensure_ascii=False),
+                           long_path=str(long_path) if long_path else None)
 
     def clips(self, status: str | None = None, limit: int = 100) -> list[dict]:
         if status:

@@ -24,11 +24,14 @@ capture:
   retention_hours: 12              # apaga gravações brutas após X horas se já processadas
   min_free_gb: 20                  # pausa captura se o disco ficar abaixo disso
   plan_b:                          # captura de tela quando streamlink E yt-dlp falham (Kick bloqueando, etc.)
-    enabled: false                 # ligue depois de configurar o áudio loopback (ver README "Plano B")
+    enabled: true                  # VB-Cable instalado em 14/11 (precisa de reinício do Windows para o dispositivo aparecer)
     force: false                   # true = usa sempre a tela (teste)
     after_failures: 2              # falhas rápidas seguidas antes de cair para a tela
     region: {x: 0, y: 0, w: 1920, h: 1080}   # região/monitor onde o navegador kiosk abre e é capturado
-    audio_device: ""               # nome dshow do loopback, ex.: "virtual-audio-capturer" ou "CABLE Output (VB-Audio Virtual Cable)"
+    audio_device: "CABLE Output (VB-Audio Virtual Cable)"   # dshow loopback (healthcheck lista os nomes)
+    route_audio: true              # durante o plano B: saída padrão -> CABLE Input, com "ouvir" nos alto-falantes; restaura ao sair
+    cable_input: "CABLE Input"     # nomes usados pelo SoundVolumeView (tools/SoundVolumeView.exe)
+    cable_output: "CABLE Output"
     fps: 30
     bitrate: "6M"
     encoder: h264_nvenc            # fallback: libx264
@@ -40,7 +43,10 @@ detect:
   window_seconds: 8                # janela deslizante de pontuação
   step_seconds: 1
   min_score: 50                    # nota mínima (0-100) para virar momento (calibrado 14/11: p99 de lives calmas ~45)
+  min_score_no_chat: 62            # quando o segmento não tem chat (rerun, chat bloqueado): só áudio+fala+keywords -> exige mais
   max_moments_per_segment: 3
+  max_moments_per_hour: 6          # teto por live; acima disso só passa nota >= always_keep_score (evita inundar a fila em evento)
+  always_keep_score: 70
   min_gap_seconds: 45              # distância mínima entre picos
   weights:                         # soma = 1.0
     chat: 0.50
@@ -159,6 +165,12 @@ edit:
     min_gap_seconds: 4
   facecam_max_height: 760          # altura máxima da facecam no layout dividido (px)
   split_shift_up: 60               # desloca o conjunto facecam+gameplay para cima (deixa a legenda sobre o gameplay)
+  long_version:                    # clip_long.mp4 (> 1 min) para redes que só monetizam vídeos longos (TikTok Creator Rewards)
+    enabled: true
+    networks: [tiktok]
+    min_seconds: 62
+    target_seconds: 75
+    max_seconds: 95
   music:                           # só na versão clip_youtube.mp4; clip.mp4 fica sem música (TikTok/Instagram)
     enabled: true
     dir: assets/music_free         # faixas livres + LICENSES.md (sem faixas -> sem versão com música)

@@ -125,14 +125,23 @@ class Detector:
             score = score * 0.7
             log.info("segmento %d com tema sensível %s: nota reduzida", seg_id, sensitive)
 
-        peaks = pick_peaks(score, float(self.d.get("min_score", 55)), int(self.d.get("min_gap_seconds", 45)),
+        # sem chat os pesos renormalizam e áudio/palavras-chave sozinhos chegam fácil à nota: exige mais
+        min_score = float(self.d.get("min_score", 55))
+        if chat_sig is None and self.d.get("min_score_no_chat") is not None:
+            min_score = max(min_score, float(self.d["min_score_no_chat"]))
+        peaks = pick_peaks(score, min_score, int(self.d.get("min_gap_seconds", 45)),
                            int(self.d.get("max_moments_per_segment", 3)))
         log.info("segmento %d: nota máx %.0f, %d pico(s), chat=%d msgs, pesos=%s", seg_id, float(score.max()),
                  len(peaks), chat_info.get("messages", 0), {k: round(v, 2) for k, v in eff_weights.items()})
 
         created: list[int] = []
         clip_cfg = self.d.get("clip", {})
+        cap = int(self.d.get("max_moments_per_hour", 0) or 0)
+        recent = self.db.moments_overlapping(stream["id"], segment["start_ts"] - 3600, segment["end_ts"]) if cap else []
         for p in peaks:
+            if cap and len(recent) + len(created) >= cap and float(score[p]) < float(self.d.get("always_keep_score", 70)):
+                log.info("pico em %.0fs (nota %.0f) descartado: teto de %d momentos/hora nesta live", p, float(score[p]), cap)
+                continue
             start_rel, end_rel = refine_bounds(float(p), transcript, clip_cfg)
             start_ts = segment["start_ts"] + start_rel
             end_ts = segment["start_ts"] + end_rel

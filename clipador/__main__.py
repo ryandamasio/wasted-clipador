@@ -76,6 +76,7 @@ def cmd_process_file(args, cfg) -> int:
         return 2
     if args.min_score is not None:
         cfg.settings._data.setdefault("detect", {})["min_score"] = args.min_score
+        cfg.settings._data["detect"]["min_score_no_chat"] = args.min_score
     db = _db(cfg)
     orch = Orchestrator(cfg, db)
     seg_len = int(cfg.settings.get("capture.segment_seconds", 120))

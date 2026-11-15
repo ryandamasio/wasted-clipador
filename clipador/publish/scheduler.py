@@ -219,6 +219,9 @@ class Scheduler:
         video = Path(clip["path"])
         if post["platform"] == "youtube" and clip.get("music_path") and Path(clip["music_path"]).exists():
             video = Path(clip["music_path"])
+        long_nets = self.cfg.settings.get("edit.long_version.networks", ["tiktok"]) or []
+        if post["platform"] in long_nets and clip.get("long_path") and Path(clip["long_path"]).exists():
+            video = Path(clip["long_path"])
         copy_data = json.loads(clip["copy_json"]) if clip.get("copy_json") else {}
         tags = [t.lstrip("#") for t in (copy_data.get("networks", {}).get(post["platform"], {}).get("hashtags") or [])]
         payload = PostPayload(video=video, title=post["title"] or clip.get("title") or "", caption=post["caption"] or "", tags=tags,

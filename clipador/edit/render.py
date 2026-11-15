@@ -47,6 +47,8 @@ class RenderResult:
     zoom_peaks: list[float] = field(default_factory=list)
     layout: str = "center"
     margin_v: int = 560
+    long_video: Path | None = None
+    long_duration: float | None = None
 
 
 def _ff_escape(path: Path | str) -> str:
@@ -193,7 +195,8 @@ class Renderer:
         self.e = cfg.settings.section("edit")
         self.transcriber = Transcriber.get(cfg.settings.get("detect.whisper", {}))
 
-    def render(self, moment: dict, segments: list[dict], streamer: Streamer, out_dir: Path, stream_live: bool) -> RenderResult:
+    def render(self, moment: dict, segments: list[dict], streamer: Streamer, out_dir: Path, stream_live: bool,
+               long_segments: list[dict] | None = None) -> RenderResult:
         out_dir.mkdir(parents=True, exist_ok=True)
         chosen, offset = source_for(moment, segments, stream_live)
         duration = min(moment["end_ts"], chosen[-1]["end_ts"]) - max(moment["start_ts"], chosen[0]["start_ts"])
@@ -241,8 +244,67 @@ class Renderer:
 
         # 6) versão YouTube com música livre (ducking); clip.mp4 continua sem música
         music_video, music = self._music_version(video, out_dir, moment, duration)
+
+        # 7) versão longa (> 1 min) para redes que só monetizam vídeos longos
+        long_video, long_dur = None, None
+        try:
+            long_video, long_dur = self._long_version(moment, long_segments or segments, streamer, out_dir, stream_live, (src_w, src_h), margin_v)
+        except Exception:  # noqa: BLE001
+            log.exception("versão longa falhou (clipe curto segue normal)")
         return RenderResult(video=video, cover=cover, duration=duration, words=words, encoder=encoder,
-                            music_video=music_video, music=music, zoom_peaks=peaks, layout=layout, margin_v=margin_v)
+                            music_video=music_video, music=music, zoom_peaks=peaks, layout=layout, margin_v=margin_v,
+                            long_video=long_video, long_duration=long_dur)
+
+    def _long_version(self, moment: dict, segments: list[dict], streamer: Streamer, out_dir: Path, stream_live: bool,
+                      src: tuple[int, int], margin_v: int) -> tuple[Path | None, float | None]:
+        lv = self.e.get("long_version", {})
+        if not lv.get("enabled", False):
+            return None, None
+        min_s, max_s = float(lv.get("min_seconds", 62)), float(lv.get("max_seconds", 95))
+        target = float(lv.get("target_seconds", 75))
+        if moment["end_ts"] - moment["start_ts"] >= min_s:
+            return None, None  # o clipe curto já é longo o bastante
+        window = {**moment, "end_ts": moment["start_ts"] + max_s}
+        try:
+            chosen, offset = source_for(window, segments, stream_live)
+        except MediaNotReady as exc:
+            log.info("versão longa adiada/pulada: %s", exc)
+            return None, None
+        avail = min(window["end_ts"], chosen[-1]["end_ts"]) - max(window["start_ts"], chosen[0]["start_ts"])
+        if avail < min_s + 2:
+            log.info("versão longa pulada: só %.0fs de mídia após o início", avail)
+            return None, None
+        concat = out_dir / "source_long.ffconcat"
+        build_concat(chosen, concat)
+        audio = decode_audio(Path(), start=offset, duration=avail, concat_list=concat)
+        transcript = self.transcriber.transcribe(audio)
+        from clipador.detect.scorer import refine_bounds
+
+        peak_rel = max(0.5, moment["peak_ts"] - moment["start_ts"])
+        start_rel, end_rel = refine_bounds(peak_rel, transcript, {"min_seconds": min_s, "max_seconds": min(max_s, avail),
+                                                                  "target_seconds": target, "pre_roll_seconds": 1.5}, media_end_rel=avail)
+        start_rel = max(0.0, min(start_rel, 3.0))   # mantém o mesmo gancho do clipe curto (no máximo 3 s de diferença)
+        if end_rel - start_rel < min_s:
+            end_rel = min(avail, start_rel + min_s + 1.0)
+        dur = round(end_rel - start_rel, 2)
+        words = [Word(w.start - start_rel, w.end - start_rel, w.text) for w in transcript.words if start_rel <= w.start and w.end <= end_rel + 0.3]
+        subs = self.e.get("subtitles", {})
+        ass_path = out_dir / "subs_long.ass"
+        ass_path.write_text(build_ass(words, subs, int(self.e.get("width", 1080)), int(self.e.get("height", 1920)), margin_v), encoding="utf-8")
+        peaks: list[float] = []
+        if self.e.get("zoom", {}).get("enabled", True):
+            sub_audio = audio[int(start_rel * 16000): int(end_rel * 16000)]
+            peaks = pick_zoom_peaks(sub_audio, dur, peak_rel - start_rel, int(self.e.get("zoom", {}).get("max_per_clip", 3)) + 2,
+                                    float(self.e.get("zoom", {}).get("min_gap_seconds", 4.0)))
+        out = out_dir / "clip_long.mp4"
+        self._render_video(concat, offset + start_rel, dur, ass_path, streamer, out, out_dir, src, peaks)
+        real = _probe_duration(out) or dur
+        if real < min_s - 1:
+            log.warning("versão longa ficou com %.0fs (< %.0fs): mídia/áudio acabou antes; descartada", real, min_s)
+            out.unlink(missing_ok=True)
+            return None, None
+        log.info("versão longa: %.0fs -> %s", real, out.name)
+        return out, round(real, 1)
 
     # ------------------------------------------------------------------
     def _layout(self, streamer: Streamer, src: tuple[int, int]) -> dict:

@@ -162,6 +162,10 @@ def write_post_files(out_dir: Path, copy_data: dict, moment: dict, streamer: Str
     for net, data in copy_data["networks"].items():
         md += [f"## {net.capitalize()}", "", f"**Título:** {data['title']}", "", "```", data["description"], "```", ""]
     md += ["## Música", copy_data["music_note"], ""]
+    if copy_data.get("long_version"):
+        lvd = copy_data["long_version"]
+        md += ["## Versão longa", f"`{lvd['file']}` ({lvd['seconds']} s): use no {', '.join(n.capitalize() for n in lvd['networks'])} "
+               "(programa de recompensas só paga vídeos com mais de 1 minuto).", ""]
     post_md = out_dir / "post.md"
     post_md.write_text("\n".join(md), encoding="utf-8")
     return post_md

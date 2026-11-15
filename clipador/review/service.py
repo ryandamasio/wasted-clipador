@@ -70,6 +70,8 @@ class ReviewService:
             "titles": copy_data.get("titles", []), "chosen_title": r.get("chosen_title") or (copy_data.get("titles") or [""])[0],
             "networks": copy_data.get("networks", {}), "music": copy_data.get("music"), "music_note": copy_data.get("music_note"),
             "has_music_video": bool(r.get("music_path")) and Path(r["music_path"]).exists(),
+            "has_long_video": bool(r.get("long_path")) and Path(r["long_path"]).exists(),
+            "long_seconds": render.get("long_seconds"),
             "has_cover": bool(r.get("cover_path")) and Path(r["cover_path"]).exists(),
             "dir": str(clip_dir), "review_note": r.get("review_note"), "recut_count": int(r.get("recut_count") or 0),
             "media_available": self._media_available(r), "render": render,
@@ -84,7 +86,8 @@ class ReviewService:
         clip = self.db.get_clip(clip_id)
         if not clip:
             raise ReviewError("clipe não existe")
-        allowed = {"clip.mp4": clip["path"], "cover.jpg": clip.get("cover_path"), "clip_youtube.mp4": clip.get("music_path")}
+        allowed = {"clip.mp4": clip["path"], "cover.jpg": clip.get("cover_path"), "clip_youtube.mp4": clip.get("music_path"),
+                   "clip_long.mp4": clip.get("long_path")}
         p = allowed.get(name)
         if not p or not Path(p).exists():
             raise ReviewError(f"{name} indisponível")
@@ -182,10 +185,19 @@ class ReviewService:
                 "hashtags": net.get("hashtags", []), "url": p.get("url"), "error": p.get("error"), "attempts": p.get("attempts") or 0,
                 "streamer_name": s.name if s else p["streamer"], "score": round(float(p.get("score") or 0)),
                 "has_cover": bool(p.get("cover_path")) and Path(p["cover_path"]).exists(),
-                "video_name": "clip_youtube.mp4" if p["platform"] == "youtube" and p.get("music_path") and Path(p["music_path"]).exists() else "clip.mp4",
+                "video_name": self._video_name_for(p),
                 "metrics": json.loads(p["metrics_json"]) if p.get("metrics_json") else None,
             })
         return out
+
+    def _video_name_for(self, p: dict) -> str:
+        if p["platform"] == "youtube" and p.get("music_path") and Path(p["music_path"]).exists():
+            return "clip_youtube.mp4"
+        clip = self.db.get_clip(p["clip_id"]) or {}
+        long_nets = self.cfg.settings.get("edit.long_version.networks", ["tiktok"]) or []
+        if p["platform"] in long_nets and clip.get("long_path") and Path(clip["long_path"]).exists():
+            return "clip_long.mp4"
+        return "clip.mp4"
 
     def post_action(self, post_id: int, action: str, url: str | None = None) -> dict:
         post = self.db.get_post(post_id)

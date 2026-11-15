@@ -100,7 +100,7 @@ def create_app(cfg: Config, db: Database, scheduler=None) -> FastAPI:
 
     @app.get("/media/{clip_id}/{name}")
     def media(clip_id: int, name: str):
-        if name not in ("clip.mp4", "clip_youtube.mp4", "cover.jpg"):
+        if name not in ("clip.mp4", "clip_youtube.mp4", "clip_long.mp4", "cover.jpg"):
             raise HTTPException(404)
         try:
             path = svc.media_path(clip_id, name)

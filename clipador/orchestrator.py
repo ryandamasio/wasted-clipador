@@ -243,13 +243,15 @@ class Orchestrator:
             return True
         live = stream["status"] == "live"
         segments = self.db.segments_covering(stream["id"], m["start_ts"] - 1, m["end_ts"] + 1)
+        long_max = float(self.cfg.settings.get("edit.long_version.max_seconds", 95))
+        long_segments = self.db.segments_covering(stream["id"], m["start_ts"] - 1, m["start_ts"] + long_max + 1)
         self.db.update("moments", m["id"], status="editing")
         day = time.strftime("%Y-%m-%d", time.localtime(m["start_ts"]))
         hhmmss = time.strftime("%H%M%S", time.localtime(m["start_ts"]))
         clip_name = f"{streamer.handle}_{hhmmss}_m{m['id']}"
         out_dir = self.cfg.settings.path("output_dir") / day / clip_name
         try:
-            result = self.renderer.render(m, segments, streamer, out_dir, live)
+            result = self.renderer.render(m, segments, streamer, out_dir, live, long_segments=long_segments)
         except MediaNotReady as exc:
             if not live:
                 # live acabou (ou é arquivo) e a mídia não existe mais: não adianta esperar
@@ -266,10 +268,14 @@ class Orchestrator:
         reasons = json.loads(m["reasons"]) if isinstance(m["reasons"], str) else m["reasons"]
         llm_title = (reasons.get("llm") or {}).get("title") if isinstance(reasons, dict) else None
         copy_data = generate_copy(self.cfg, streamer, m, llm_title, music=result.music)
+        if result.long_video:
+            copy_data["long_version"] = {"file": result.long_video.name, "seconds": round(result.long_duration or 0),
+                                         "networks": list(self.cfg.settings.get("edit.long_version.networks", ["tiktok"]))}
         post_md = write_post_files(out_dir, copy_data, m, streamer, clip_name)
-        render_info = {"layout": result.layout, "zoom": result.zoom_peaks, "margin_v": result.margin_v, "encoder": result.encoder}
+        render_info = {"layout": result.layout, "zoom": result.zoom_peaks, "margin_v": result.margin_v, "encoder": result.encoder,
+                       "long_seconds": result.long_duration}
         clip_id = self.db.add_clip(m["id"], result.video, result.cover, post_md, result.duration,
-                                   copy_data["titles"][0], copy_data, result.music_video, render_info)
+                                   copy_data["titles"][0], copy_data, result.music_video, render_info, result.long_video)
         self.db.update("moments", m["id"], status="clipped")
         latency = time.time() - m["peak_ts"]
         log.info("CLIPE PRONTO #%d (%.0fs, nota %.0f, %s, %s, %.0f min após o momento): %s", clip_id, result.duration,

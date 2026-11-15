@@ -114,6 +114,13 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   lista dispositivos dshow, plano B, backup e tarefa de auto-start. 36 testes. NÃO validado: 3 lives simultâneas
   numa noite cheia (só observabilidade pronta no Painel: fila do Whisper e latência).
 
+- 14/11 (noite): dono pediu autonomia total. Feito: VB-Cable instalado (dispositivo "CABLE Output (VB-Audio Virtual
+  Cable)" visível; plano B `enabled: true` com roteamento de áudio via tools/SoundVolumeView.exe, ainda não exercitado
+  numa falha real), interface redesenhada (nav inferior, estrelas de procurado, pôr do sol Vice City, Bebas Neue +
+  Rubik via Google Fonts), versão longa `clip_long.mp4` 62-95 s para TikTok (render extra ~50 s NVENC; scheduler e
+  Agenda usam para a rede), `detect.min_score_no_chat: 62` e `max_moments_per_hour: 6` (final do Worlds no Baiano
+  gerou 16 clipes/h). Atalho WASTED.url na área de trabalho.
+
 ## Decisões registradas
 - Streamers iniciais por pesquisa (Streams Charts 2025): Coringa (Kick, nº1 em GTA BR), PaulinhoLOKObr, Gaules,
   Baiano, Alanzoka. "David Jones" do pedido provavelmente é Davy Jones (Gameplayrj), desabilitado até confirmar.

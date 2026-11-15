@@ -30,8 +30,10 @@ Edite `config/streamers.yaml` (canais) e, se quiser, `config/settings.yaml` (pes
 .venv/Scripts/python -m clipador check        # quem está online agora
 ```
 Clipes aparecem em `data/output/AAAA-MM-DD/<streamer>_<hora>_m<id>/`:
-`clip.mp4` (1080x1920, sem música: TikTok/Reels/Kwai), `clip_youtube.mp4` (com música livre, se houver faixas),
-`cover.jpg`, `post.md` (3 títulos + textos por rede, copiáveis) e `post.json`.
+`clip.mp4` (1080x1920, sem música: Reels/Kwai), `clip_youtube.mp4` (com música livre), `clip_long.mp4`
+(versão de 62-95 s para o TikTok, cujo programa de recompensas só paga vídeos com mais de 1 minuto; gerada quando a
+gravação já cobre o trecho), `cover.jpg`, `post.md` (3 títulos + textos por rede, copiáveis) e `post.json`.
+A interface web (`http://localhost:8787`, atalho WASTED na área de trabalho) mostra tudo isso por clipe.
 
 ### Fila de aprovação (celular)
 Com `run` ou `review` rodando, abra `http://IP-do-PC:8787` no celular (mesmo Wi-Fi; o IP aparece no `status`).

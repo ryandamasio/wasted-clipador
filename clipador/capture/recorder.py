@@ -102,6 +102,57 @@ class Recorder(threading.Thread):
         cmd += self._segment_opts(run_dir)
         return cmd
 
+    # --- roteamento de áudio do plano B (SoundVolumeView em tools/) ---------------------------------
+    def _svv(self) -> Path | None:
+        p = Path(self.plan_b_cfg().get("soundvolumeview") or (self.dir.parent.parent.parent / "tools" / "SoundVolumeView.exe"))
+        return p if p.exists() else None
+
+    def _current_default_output(self, svv: Path) -> str | None:
+        """Nome do dispositivo de reprodução padrão (coluna 'Default' = 'Render' no CSV do SoundVolumeView)."""
+        import csv
+        import tempfile
+
+        tmp = Path(tempfile.gettempdir()) / f"svv_{os.getpid()}.csv"
+        try:
+            subprocess.run([str(svv), "/scomma", str(tmp)], capture_output=True, timeout=20)
+            with tmp.open(encoding="utf-8-sig", errors="replace", newline="") as f:
+                for row in csv.DictReader(f):
+                    if row.get("Type") == "Device" and row.get("Direction") == "Render" and "Render" in (row.get("Default") or ""):
+                        return row.get("Name") or row.get("Device Name")
+        except Exception as exc:  # noqa: BLE001
+            log.debug("svv csv: %s", exc)
+        finally:
+            tmp.unlink(missing_ok=True)
+        return None
+
+    def _route_audio(self, enable: bool) -> None:
+        """Plano B: manda o som do PC para o cabo virtual (e deixa 'ouvir' nos alto-falantes); restaura ao sair."""
+        pb = self.plan_b_cfg()
+        cable_in, cable_out = pb.get("cable_input", "CABLE Input"), pb.get("cable_output", "CABLE Output")
+        if not pb.get("route_audio", True) or not pb.get("audio_device"):
+            return
+        svv = self._svv()
+        if not svv:
+            log.warning("[%s] plano B sem tools/SoundVolumeView.exe: não consigo rotear o áudio sozinho", self.streamer.handle)
+            return
+        try:
+            if enable:
+                prev = self._current_default_output(svv)
+                self._prev_output = prev if prev and "CABLE" not in prev else None
+                subprocess.run([str(svv), "/SetDefault", cable_in, "all"], capture_output=True, timeout=20)
+                if self._prev_output:
+                    subprocess.run([str(svv), "/SetPlaybackThroughDevice", cable_out, self._prev_output], capture_output=True, timeout=20)
+                    subprocess.run([str(svv), "/SetListenToThisDevice", cable_out, "1"], capture_output=True, timeout=20)
+                log.info("[%s] áudio do PC roteado para %s (você continua ouvindo em %s)", self.streamer.handle, cable_in, self._prev_output or "?")
+            else:
+                prev = getattr(self, "_prev_output", None)
+                subprocess.run([str(svv), "/SetListenToThisDevice", cable_out, "0"], capture_output=True, timeout=20)
+                if prev:
+                    subprocess.run([str(svv), "/SetDefault", prev, "all"], capture_output=True, timeout=20)
+                    log.info("[%s] áudio do PC de volta para %s", self.streamer.handle, prev)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("[%s] roteamento de áudio falhou: %s", self.streamer.handle, exc)
+
     def _browser_cmd(self) -> list[str] | None:
         pb = self.plan_b_cfg()
         if not self.browser or not pb.get("open_browser", True):
@@ -168,6 +219,7 @@ class Recorder(threading.Thread):
         log.info("[%s] iniciando captura (%s) -> %s", self.streamer.handle, mode, run_dir)
         browser_proc = None
         if mode == "screen":
+            self._route_audio(True)
             bcmd = self._browser_cmd()
             if bcmd:
                 browser_proc = subprocess.Popen(bcmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -196,6 +248,8 @@ class Recorder(threading.Thread):
                 time.sleep(2)
         finally:
             self._terminate(*self._procs)
+            if mode == "screen":
+                self._route_audio(False)
             time.sleep(1)
             self._register_new_segments(csv_path, seen, t0, final=True)
         duration = time.time() - started
