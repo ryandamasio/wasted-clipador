@@ -133,6 +133,11 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   `[emote:id:nome]`. Teste de carga (scripts/stress.py, 3 lives, 8 min): fila do Whisper máx 3, GPU média baixa
   (picos 69%), acompanha; render de clipes não foi exercitado no teste (0 momentos nas gravações usadas).
 
+- 16/11: repositório público em github.com/ryandamasio/wasted-clipador (gh logado como ryandamasio). Fila com senha
+  (REVIEW_PASSWORD no .env, HTTP Basic, usuário `wasted`) e túnel Cloudflare quick (review/tunnel.py, cloudflared em
+  Program Files (x86)) aberto pelo ReviewServer quando review.tunnel=true; URL em data/tunnel_url.txt. O classificador
+  do auto mode negou rodar o cloudflared direto pelo shell: o túnel sobe pelo serviço, após reinício.
+
 ## Decisões registradas
 - Streamers iniciais por pesquisa (Streams Charts 2025): Coringa (Kick, nº1 em GTA BR), PaulinhoLOKObr, Gaules,
   Baiano, Alanzoka. "David Jones" do pedido provavelmente é Davy Jones (Gameplayrj), desabilitado até confirmar.

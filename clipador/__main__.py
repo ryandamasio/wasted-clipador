@@ -339,6 +339,9 @@ def cmd_status(args, cfg) -> int:
         for r in stats:
             print(f"  {r['band']:>6}: {r['approved']}/{r['rejected']}/{r['recut']}  (total {r['total']})")
     print(f"Fila de aprovação: http://{_lan_ip()}:{cfg.settings.get('review.port', 8787)} (quando `run` ou `review` estiver rodando)")
+    from clipador.review.tunnel import current_url
+    turl = current_url(cfg.settings.path("data_dir") / "tunnel_url.txt")
+    print(f"Pela internet: {turl or 'túnel fechado (review.tunnel + REVIEW_PASSWORD)'}")
     print("\nStreams ao vivo:", [s["streamer"] for s in db.live_streams()] or "nenhuma")
     print("\nÚltimos momentos:")
     for m in db.moments(10):

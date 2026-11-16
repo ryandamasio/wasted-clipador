@@ -345,7 +345,7 @@ function renderMetrics(m) {
   html += `</table></div>`;
   html += `<h2 class="sec">Posts</h2><div class="tw"><table class="t"><tr><th>rede</th><th>agendados</th><th>postados</th><th>falhos</th><th>views</th><th>likes</th></tr>`;
   html += (m.posts || []).map(p => { const v = (m.views || {})[p.platform] || {}; return `<tr><td>${NETS[p.platform] || p.platform}</td><td class="n">${p.scheduled || 0}</td><td class="n">${p.posted || 0}</td><td class="n">${p.failed || 0}</td><td class="n">${v.views ?? "–"}</td><td class="n">${v.likes ?? "–"}</td></tr>`; }).join("") || `<tr><td colspan="6" style="color:var(--dim)">nenhum post ainda</td></tr>`;
-  html += `</table></div><div class="foot">último backup do banco: ${h.last_backup || "nenhum"} · atualizado ${m.generated_at}</div>`;
+  html += `</table></div><div class="foot">${h.tunnel_url ? `acesso pela internet: <a href="${esc(h.tunnel_url)}">${esc(h.tunnel_url)}</a> (senha do .env) · ` : ""}último backup do banco: ${h.last_backup || "nenhum"} · atualizado ${m.generated_at}</div>`;
   $("#list").innerHTML = html;
 }
 

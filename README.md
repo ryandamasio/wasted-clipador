@@ -40,7 +40,10 @@ Com `run` ou `review` rodando, abra `http://IP-do-PC:8787` no celular (mesmo Wi-
 Cada clipe mostra player, nota, motivo, 3 títulos editáveis e textos por rede, com botões **Aprovar / Rejeitar /
 Ajustar corte (±1-2 s no início/fim) / Re-editar**. Aprovados ficam na aba própria com botão "copiar" por rede e
 "Marcar como postado". Cada decisão é guardada em `reviews` para calibrar a detecção.
-Para acessar fora de casa use Tailscale ou Cloudflare Tunnel (não exponha a porta direto na internet).
+Para acessar fora de casa (você ou um amigo): defina `REVIEW_PASSWORD` no `.env` e deixe `review.tunnel: true`;
+com o `cloudflared` instalado (`winget install Cloudflare.cloudflared`) o `run` abre um endereço
+`https://xxxx.trycloudflare.com`, mostrado no `clipador status`, no log e no Painel. Usuário `wasted` + a senha.
+O endereço muda a cada reinício; sem senha o túnel não abre.
 `review.auto_approve_min_score: 85` em `settings.yaml` aprova sozinho acima da nota (desligado por padrão).
 
 Testes sem esperar uma live:

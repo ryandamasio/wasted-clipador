@@ -300,7 +300,8 @@ class ReviewService:
                        "disk_free_gb": round(usage.free / 1e9, 1), "recordings_gb": round(rec_size, 2), "gpu": gpu,
                        "last_backup": time.strftime("%d/%m %H:%M", time.localtime(backups[-1].stat().st_mtime)) if backups else None,
                        "publish_mode": self.cfg.settings.get("publish.mode", "manual"),
-                       "plan_b": bool(self.cfg.settings.get("capture.plan_b.enabled"))},
+                       "plan_b": bool(self.cfg.settings.get("capture.plan_b.enabled")),
+                       "tunnel_url": __import__("clipador.review.tunnel", fromlist=["current_url"]).current_url(data_dir / "tunnel_url.txt")},
             "generated_at": time.strftime("%d/%m %H:%M:%S"),
         }
 

@@ -189,6 +189,7 @@ review:
   enabled: true                    # sobe a fila de aprovação junto com `clipador run`
   host: 0.0.0.0                    # acessível na rede local (celular no mesmo Wi-Fi): http://IP-do-PC:8787
   port: 8787
+  tunnel: true                     # abre https://xxxx.trycloudflare.com (precisa de cloudflared e REVIEW_PASSWORD no .env)
   auto_approve_min_score: null     # ex.: 85 para auto-aprovar; null = desligado
   purge_after_hours: 72            # apaga a pasta de saída de clipes rejeitados/substituídos após X h (null = nunca)
 

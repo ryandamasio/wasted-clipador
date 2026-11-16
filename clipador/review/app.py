@@ -13,12 +13,15 @@
 """
 from __future__ import annotations
 
+import base64
 import logging
+import os
+import secrets
 import threading
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from jinja2 import Environment, FileSystemLoader
 
 from clipador.config import Config
@@ -34,6 +37,23 @@ def create_app(cfg: Config, db: Database, scheduler=None) -> FastAPI:
     env = Environment(loader=FileSystemLoader(str(TEMPLATES)), autoescape=True)
     app = FastAPI(title="Clipador — fila de aprovação", docs_url=None, redoc_url=None)
     app.state.service = svc
+    password = (os.environ.get("REVIEW_PASSWORD") or "").strip()
+
+    @app.middleware("http")
+    async def _basic_auth(request: Request, call_next):
+        """Com REVIEW_PASSWORD no .env, exige usuário 'wasted' + senha (HTTP Basic: o navegador lembra)."""
+        if password:
+            ok = False
+            auth = request.headers.get("authorization", "")
+            if auth.lower().startswith("basic "):
+                try:
+                    user, _, pwd = base64.b64decode(auth[6:]).decode("utf-8", "replace").partition(":")
+                    ok = secrets.compare_digest(pwd, password) and user in ("wasted", "", "admin", "ryan")
+                except Exception:  # noqa: BLE001
+                    ok = False
+            if not ok:
+                return Response("senha necessária", status_code=401, headers={"WWW-Authenticate": 'Basic realm="WASTED"'})
+        return await call_next(request)
 
     @app.exception_handler(ReviewError)
     async def _review_error(_req: Request, exc: ReviewError):
@@ -134,12 +154,24 @@ class ReviewServer:
         config = uvicorn.Config(self.app, host=self.host, port=self.port, log_level="warning", access_log=False)
         self.server = uvicorn.Server(config)
         self.thread = threading.Thread(target=self.server.run, name="review-web", daemon=True)
+        self.tunnel = None
+        if r.get("tunnel"):
+            from clipador.review.tunnel import Tunnel
+
+            if (os.environ.get("REVIEW_PASSWORD") or "").strip():
+                self.tunnel = Tunnel(self.port, cfg.settings.path("data_dir") / "tunnel_url.txt")
+            else:
+                log.error("review.tunnel ligado mas sem REVIEW_PASSWORD no .env: túnel NÃO aberto (seria público sem senha)")
 
     def start(self) -> None:
         self.thread.start()
         log.info("fila de aprovação em http://%s:%d (no celular use o IP deste PC na rede local)",
                  "localhost" if self.host in ("0.0.0.0", "::") else self.host, self.port)
+        if self.tunnel:
+            self.tunnel.start()
 
     def stop(self) -> None:
+        if self.tunnel:
+            self.tunnel.stop()
         self.server.should_exit = True
         self.thread.join(timeout=5)
