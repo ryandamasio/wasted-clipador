@@ -125,8 +125,35 @@ class TwitchChat(ChatRecorder):
 
 
 class KickChat(ChatRecorder):
-    PUSHER_URL = ("wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js"
-                  "&version=8.4.0-rc2&flash=false")
+    # A Kick trocou a chave do Pusher em out/2026 (a antiga 32cbd69e4b950bf97679 responde 4001). A chave atual é
+    # negociada no mesmo endpoint que o site usa; se falhar, usa a última conhecida.
+    FALLBACK_KEY, FALLBACK_CLUSTER = "34bf7a0ff419a2a775b9", "us2"
+    NEGOTIATE_URL = "https://web.kick.com/api/v1/realtime/connection"
+
+    def _pusher_url(self) -> str:
+        import uuid
+
+        import httpx
+
+        key, cluster = self.FALLBACK_KEY, self.FALLBACK_CLUSTER
+        body = {"client": {"id": str(uuid.uuid4()), "type": "web"}, "capabilities": {"accepted_providers": [{"provider": "pusher"}]}}
+        headers = {"User-Agent": UA, "Accept": "application/json", "Content-Type": "application/json", "Origin": "https://kick.com",
+                   "Referer": "https://kick.com/"}
+        try:
+            with httpx.Client(http2=False, headers=headers, timeout=20) as client:
+                r = client.post(self.NEGOTIATE_URL, json=body)
+            if r.status_code == 200:
+                for conn in (r.json().get("data") or {}).get("connections") or []:
+                    cred = conn.get("credentials") or {}
+                    k = cred.get("app_key") or cred.get("key")
+                    if conn.get("provider") == "pusher" and k:
+                        key, cluster = k, cred.get("cluster") or cluster
+                        break
+            else:
+                log.debug("[%s] negociação Pusher HTTP %s; usando chave conhecida", self.streamer.handle, r.status_code)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("[%s] negociação Pusher falhou (%s); usando chave conhecida", self.streamer.handle, str(exc)[:100])
+        return f"wss://ws-{cluster}.pusher.com/app/{key}?protocol=7&client=js&version=8.4.0-rc2&flash=false"
 
     def _chatroom_id(self) -> int:
         import httpx
@@ -151,7 +178,7 @@ class KickChat(ChatRecorder):
         from websockets.sync.client import connect
 
         chatroom = self._chatroom_id()
-        with connect(self.PUSHER_URL, open_timeout=20, additional_headers={"User-Agent": UA}) as ws:
+        with connect(self._pusher_url(), open_timeout=20, additional_headers={"User-Agent": UA, "Origin": "https://kick.com"}) as ws:
             ws.send(json.dumps({"event": "pusher:subscribe", "data": {"auth": "", "channel": f"chatrooms.{chatroom}.v2"}}))
             self.connected = True
             log.info("[%s] chat Kick conectado (chatroom %d)", self.streamer.handle, chatroom)
@@ -168,6 +195,8 @@ class KickChat(ChatRecorder):
                 name = evt.get("event", "")
                 if name == "pusher:ping":
                     ws.send(json.dumps({"event": "pusher:pong", "data": {}}))
+                elif name == "pusher:error":
+                    raise ConnectionError(f"pusher:error {evt.get('data')}")
                 elif name.endswith("ChatMessageEvent"):
                     data = evt.get("data")
                     if isinstance(data, str):

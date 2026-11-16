@@ -127,6 +127,11 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   (Cellbit, Felps, JonVlogs, Gabepeixe, LuquEt4, YoDa, Rakin, TcK10, BRKsEDU no YouTube); Casimiro habilitado;
   `capture.check_workers: 6`. `scripts/stress.py` = teste de carga com lives falsas (url `file:` no Recorder).
   Dono NÃO quer som saindo do PC: nunca abrir Twitch/Kick no navegador embutido (ver memória).
+  15/11 à noite: Kick AO VIVO validada (Coringa, streamlink, 105+ segmentos). Chat da Kick corrigido: a Kick trocou a
+  chave do Pusher em out/2026; agora KickChat negocia em web.kick.com/api/v1/realtime/connection (fallback
+  34bf7a0ff419a2a775b9/us2) e trata pusher:error reconectando. Mensagens da Kick trazem emotes como
+  `[emote:id:nome]`. Teste de carga (scripts/stress.py, 3 lives, 8 min): fila do Whisper máx 3, GPU média baixa
+  (picos 69%), acompanha; render de clipes não foi exercitado no teste (0 momentos nas gravações usadas).
 
 ## Decisões registradas
 - Streamers iniciais por pesquisa (Streams Charts 2025): Coringa (Kick, nº1 em GTA BR), PaulinhoLOKObr, Gaules,
