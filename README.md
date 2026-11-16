@@ -135,5 +135,18 @@ O handle vai para `config/blocklist.yaml` e nunca mais é gravado, mesmo com `en
 - **Fase 4:** painel de métricas, plano B por captura de tela, auto-start/reinício, backup do banco, comando de
   remoção: implementada. Falta validar 3 lives simultâneas numa noite cheia e o plano B com áudio loopback instalado.
 
+## Para colaborar (outra máquina)
+```bash
+git clone https://github.com/ryandamasio/wasted-clipador.git
+cd wasted-clipador
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements.txt
+copy .env.example .env
+.venv/Scripts/python -m clipador healthcheck
+```
+Precisa de Windows com GPU NVIDIA para o Whisper em CUDA e o NVENC (sem GPU roda em CPU/libx264, bem mais lento).
+Nunca commite `.env`, `data/` nem `tools/` (já estão no `.gitignore`). O banco e os clipes são locais de cada máquina;
+quem roda o `run` é o PC que grava as lives. Combine quem está rodando para não gravar a mesma live duas vezes.
+
 ## Remover um clipe/streamer (pedido do streamer)
 Coloque `enabled: false` no `streamers.yaml` e apague a pasta do clipe em `data/output`. Nada é publicado sem você.
