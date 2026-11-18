@@ -65,6 +65,9 @@ def main() -> int:
     clip_cfg = {**cfg.settings.get("detect.clip", {}), "pre_roll_seconds": args.pre, "max_seconds": args.max}
     s_rel, e_rel = refine_bounds(120.0, Transcript(words=rel, text=""), clip_cfg)
     start, end = base + s_rel, base + e_rel  # posições no VOD
+    if peak - start > 12:
+        # gancho nos primeiros segundos: corte que começa muito antes da reação perde quem está rolando o feed
+        print(f"AVISO: o corte começa {peak - start:.0f}s antes da frase-chave; o gancho precisa estar nos primeiros 3 s")
 
     # baixa só o trecho (com folga de 3 s) na melhor qualidade
     url = subprocess.run([*ytdlp_cmd(), "--no-warnings", "-g", "-f", args.quality, f"https://www.twitch.tv/videos/{args.vod}"],

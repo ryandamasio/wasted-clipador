@@ -113,7 +113,7 @@ streamers:
     display: "@cellbit"
     channel_link: https://www.twitch.tv/cellbit
     enabled: true
-    facecam: {x: 0.68, y: 0.685, w: 0.23, h: 0.315}   # medido 18/11 (GTA 6 PS5): recorte verde no canto inf. direito
+    facecam: {x: 0.08, y: 0.70, w: 0.25, h: 0.30}   # 18/11 à tarde: câmera recortada no canto inf. esquerdo (de manhã ficava à direita)
     chat_offset_seconds: null
 
   - name: Felps
