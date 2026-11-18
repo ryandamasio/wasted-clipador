@@ -33,6 +33,27 @@ class Detector:
         self.transcriber = Transcriber.get(self.d.get("whisper", {}))
         self.llm = LLMScorer(self.d.get("llm", {}))
         self._audio_baseline: dict[int, tuple[float, float]] = {}
+        self._last_cutscene: dict[int, float] = {}
+
+    def cutscene_seconds(self, audio: np.ndarray, total: int, chunk: int = 30) -> np.ndarray:
+        """1.0 nos segundos de janelas de 30 s em que o Whisper ouve inglês (diálogo do jogo), senão 0."""
+        out = np.zeros(total, dtype=np.float32)
+        thr = float(self.d.get("cutscene_english_prob", 0.5))
+        model = getattr(self.transcriber, "model", None)
+        if model is None or not hasattr(model, "detect_language") or thr > 1:
+            return out
+        for s in range(0, total, chunk):
+            a = audio[s * 16000:(s + chunk) * 16000]
+            if len(a) < 16000 * 8:
+                continue
+            try:
+                with self.transcriber.lock:
+                    _, _, probs = model.detect_language(a)
+            except Exception:  # noqa: BLE001
+                return out
+            if dict(probs).get("en", 0.0) >= thr:
+                out[s:s + chunk] = 1.0
+        return out
 
     # ------------------------------------------------------------------
     def chat_offset(self, streamer_handle: str) -> float:
@@ -121,6 +142,11 @@ class Detector:
             self.db.update("segments", seg_id, status="detected")
             return []
 
+        # cutscene: diálogo do jogo em inglês com o streamer quieto. Cena cinematográfica viraliza: bônus na nota
+        cine = self.cutscene_seconds(audio, len(score))
+        if cine.any():
+            score = np.minimum(100.0, score + float(self.d.get("cutscene_bonus", 15)) * cine)
+
         # penaliza conteúdo problemático (todo o segmento, por segurança)
         blocked = sig.blocklist_hits(transcript, messages, self.d.get("blocklist_words", []))
         if blocked:
@@ -193,6 +219,14 @@ class Detector:
                     if llm["score"] <= 1:
                         log.info("LLM rejeitou pico em %.0fs: %s", p, llm.get("reason"))
                         continue
+            if cine[min(p, len(cine) - 1)]:
+                last = self._last_cutscene.get(stream["id"], 0.0)
+                gap = float(self.d.get("cutscene_min_gap_minutes", 20)) * 60
+                if segment["start_ts"] + p - last < gap and final_score < float(self.d.get("always_keep_score", 70)):
+                    log.info("pico em %.0fs descartado: outra cutscene há menos de %.0f min", p, gap / 60)
+                    continue
+                self._last_cutscene[stream["id"]] = segment["start_ts"] + p
+                comps["cutscene"] = True
             comps["notes"] = self._reasons_text(comps)
             mid = self.db.add_moment(stream["id"], seg_id, start_ts, end_ts, segment["start_ts"] + p,
                                      round(final_score, 1), comps, text, words_abs)
@@ -212,6 +246,8 @@ class Detector:
             notes.append("reação forte na fala")
         if c.get("keywords_found"):
             notes.append("GTA: " + ", ".join(c["keywords_found"][:3]))
+        if c.get("cutscene"):
+            notes.append("cena do jogo (cutscene)")
         content = c.get("content") or {}
         if content.get("viral"):
             notes.append("reação: " + ", ".join(content["viral"][:3]))

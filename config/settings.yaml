@@ -44,7 +44,10 @@ detect:
   window_seconds: 8                # janela deslizante de pontuação
   step_seconds: 1
   min_score: 50                    # nota mínima (0-100) para virar momento (calibrado 14/11: p99 de lives calmas ~45)
-  min_score_no_chat: 62            # quando o segmento não tem chat (rerun, chat bloqueado): só áudio+fala+keywords -> exige mais
+  cutscene_english_prob: 0.5       # janela de 30 s com inglês >= isso = diálogo do jogo (cutscene)
+  cutscene_bonus: 15               # cena cinematográfica viraliza (pedido do dono, 18/11)
+  cutscene_min_gap_minutes: 20     # no máximo 1 corte de cutscene a cada 20 min por live (salvo nota >= always_keep_score)
+  min_score_no_chat: 62           # quando o segmento não tem chat (rerun, chat bloqueado): só áudio+fala+keywords -> exige mais
   max_moments_per_segment: 2      # clipes de 1 min+: no máximo 2 por segmento de 2 min
   max_moments_per_hour: 6          # teto por live; acima disso só passa nota >= always_keep_score (evita inundar a fila em evento)
   always_keep_score: 70

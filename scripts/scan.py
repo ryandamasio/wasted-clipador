@@ -65,7 +65,32 @@ def words_from_audio(path: Path) -> list[tuple[float, float, str]]:
     return words
 
 
-def scan(words, origin: float, chat_ts: list[float], top: int, label_fmt) -> None:
+def english_marks(path: Path, chunk: int = 30) -> dict[int, float]:
+    """{início do bloco de 30 s: prob. de inglês} (diálogo do jogo = cutscene). Cache em .lang.json."""
+    cache = path.with_suffix(".lang.json")
+    if cache.exists():
+        return {int(k): v for k, v in json.loads(cache.read_text(encoding="utf-8")).items()}
+    import numpy as _np
+
+    from clipador.detect.audio import decode_audio
+    from clipador.detect.transcribe import Transcriber
+
+    tr = Transcriber.get(load_config().settings.get("detect.whisper", {}))
+    tr.transcribe(_np.zeros(16000, dtype=_np.float32))
+    marks, pos = {}, 0
+    while True:
+        a = decode_audio(path, start=pos, duration=chunk)
+        if len(a) < 16000 * 8:
+            break
+        with tr.lock:
+            _, _, probs = tr.model.detect_language(a)
+        marks[pos] = round(dict(probs).get("en", 0.0), 2)
+        pos += chunk
+    cache.write_text(json.dumps(marks), encoding="utf-8")
+    return marks
+
+
+def scan(words, origin: float, chat_ts: list[float], top: int, label_fmt, en_marks: dict[int, float] | None = None) -> None:
     if not words:
         print("sem transcrição"); return
     t_end = words[-1][1]
@@ -87,6 +112,10 @@ def scan(words, origin: float, chat_ts: list[float], top: int, label_fmt) -> Non
         chat_ratio = (n_chat / WIN) / rate_all if rate_all else 0
         wps = len(txt) / WIN
         score = 3 * len(info["viral"]) + min(chat_ratio, 4) + (1 if wps > 3 else 0) - 2.5 * max(0, info["chat_talk"] - len(info["viral"]))
+        en = max((v for k, v in (en_marks or {}).items() if k < t + WIN and k + 30 > t), default=0.0)
+        if en >= 0.5:
+            score += 4  # cutscene: cena cinematográfica do jogo
+            info = {**info, "viral": ["CENA DO JOGO (inglês %.0f%%)" % (en * 100)] + info["viral"]}
         rows.append((score, t, info, chat_ratio, text))
         t += STEP
     rows.sort(key=lambda r: -r[0])
@@ -113,7 +142,8 @@ def main() -> int:
     import time as _t
     if args.audio:
         words = words_from_audio(Path(args.audio))
-        scan(words, 0.0, [], args.top, lambda s: f"{int(s // 3600)}:{int(s % 3600 // 60):02d}:{int(s % 60):02d} do VOD")
+        scan(words, 0.0, [], args.top, lambda s: f"{int(s // 3600)}:{int(s % 3600 // 60):02d}:{int(s % 60):02d} do arquivo",
+             english_marks(Path(args.audio)))
     if args.stream:
         # várias streams (o serviço abre uma nova a cada reinício) viram uma linha do tempo só
         words, chat, origins = [], [], []
