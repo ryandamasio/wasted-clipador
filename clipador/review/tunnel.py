@@ -39,6 +39,7 @@ class Tunnel(threading.Thread):
         self.proc: subprocess.Popen | None = None
 
     def run(self) -> None:
+        self.url_file.unlink(missing_ok=True)  # endereço de uma execução anterior morta não vale mais
         exe = find_cloudflared()
         if not exe:
             log.error("cloudflared não encontrado: `winget install Cloudflare.cloudflared`")

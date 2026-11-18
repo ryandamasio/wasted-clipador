@@ -42,6 +42,7 @@ class Recorder(threading.Thread):
         stamp = time.strftime("%Y%m%d_%H%M%S")
         self.dir = recordings_dir / f"{streamer.handle}_{stamp}"
         self.dir.mkdir(parents=True, exist_ok=True)
+        self.title = title or ""
         self.stream_id = db.create_stream(streamer.handle, streamer.platform, streamer.url, self.dir, title)
         self._idx = 0
         self._procs: list[subprocess.Popen] = []

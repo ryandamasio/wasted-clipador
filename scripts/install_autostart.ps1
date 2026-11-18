@@ -18,7 +18,8 @@ if ($Remove) {
 if (-not (Test-Path $bat)) { Write-Error "não achei $bat"; exit 1 }
 
 # cmd /c start "Clipador" /min "<bat>"  -> janela minimizada; sem admin; só no logon deste usuário
-$action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument ('/c start "Clipador" /min "' + $bat + '"') -WorkingDirectory $root
+# janela oculta: uma janela minimizada era fechada sem querer e derrubava o serviço inteiro (18/11)
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument ('-NoProfile -WindowStyle Hidden -Command "& ''' + $bat + '''"') -WorkingDirectory $root
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null

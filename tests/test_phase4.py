@@ -66,6 +66,14 @@ def test_source_commands_kick_headless_flag_and_file_live(tmp_path):
     db.close()
 
 
+def test_gta_and_rerun_titles():
+    from clipador.orchestrator import is_gta, is_rerun
+
+    assert is_gta("GTA 6. (jogando no PS5)") and is_gta("VICE CITY BABYYYY") and is_gta("gta rp cidade alta")
+    assert not is_gta("367 | noitinha :)") and not is_gta(None) and not is_gta("agtap")
+    assert is_rerun("RERUN: Lobby do Alastro!") and not is_rerun("GTA 6 ao vivo")
+
+
 def test_screen_capture_commands(tmp_path):
     db = Database(tmp_path / "t.sqlite")
     s = Streamer(name="X", handle="x", platform="kick", url="https://kick.com/x")
