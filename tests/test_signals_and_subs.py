@@ -43,5 +43,24 @@ def test_build_ass_highlights_current_word():
     assert "PlayResX: 1080" in ass and "MarginV" in ass.split("[V4+ Styles]")[1]
     events = [l for l in ass.splitlines() if l.startswith("Dialogue:")]
     assert len(events) == 3
-    assert events[0].endswith("{\\c&H0000FFFF\\fscx112\\fscy112}MANO{\\r} OLHA ISSO")
+    assert events[0].endswith("{\\c&H0000FFFF\\fscx125\\fscy125\\t(0,100,\\fscx112\\fscy112)}MANO{\\r} OLHA ISSO")
     assert "KKKK" not in ass
+
+
+def test_build_ass_no_overlap_between_lines_and_merges_hyphen_fragments():
+    from clipador.edit.subtitles import merge_fragments
+
+    words = [Word(0, 0.3, "um"), Word(0.35, 0.6, "dois"), Word(0.65, 0.9, "três"), Word(1.0, 1.3, "post"),
+             Word(1.3, 1.5, "-it"), Word(1.6, 1.9, "fim")]
+    merged = merge_fragments(words)
+    assert [w.text for w in merged] == ["um", "dois", "três", "post-it", "fim"]
+    ass = build_ass(words, {"uppercase": True}, margin_v=500)
+    events = [l.split(",", 3)[1:3] for l in ass.splitlines() if l.startswith("Dialogue:")]
+
+    def secs(ts):
+        h, m, s = ts.split(":")
+        return int(h) * 3600 + int(m) * 60 + float(s)
+
+    spans = [(secs(a), secs(b)) for a, b in events]
+    assert all(spans[i][1] <= spans[i + 1][0] + 1e-6 for i in range(len(spans) - 1))  # nada se sobrepõe
+    assert "-IT" not in ass.replace("POST-IT", "")

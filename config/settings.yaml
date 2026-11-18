@@ -157,10 +157,13 @@ edit:
     opacity: 0.6
     width: 220
     position: "top-right"          # top-left | top-right
-  zoom:                            # punch-in suave nos picos de áudio (Fase 2)
+  center_crop: 0.7                 # mantém 70% centrais da largura: gameplay ocupa ~45% da tela vertical (antes 32%)
+  zoom:                            # punch-in nos picos de áudio: entra rápido, segura, sai suave
     enabled: true
-    amount: 0.12                   # 12% de aproximação no pico
-    width_seconds: 1.2             # meia-largura do zoom (entra e sai em ~2,4 s)
+    amount: 0.16                   # 16% de aproximação no pico
+    attack_seconds: 0.15           # entrada (rápida = "punch")
+    hold_seconds: 0.5
+    width_seconds: 0.9             # saída suave
     max_per_clip: 3
     min_gap_seconds: 4
   facecam_max_height: 760          # altura máxima da facecam no layout dividido (px)

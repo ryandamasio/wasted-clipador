@@ -142,16 +142,21 @@ def pick_zoom_peaks(audio: np.ndarray, duration: float, must_include: float | No
     return sorted(peaks)
 
 
-def zoom_expression(peaks: list[float], fps: int, amount: float = 0.12, width: float = 1.2) -> str:
-    """Expressão de zoom (zoompan, variável `in` = nº do frame) com um sino de cosseno em cada pico.
+def zoom_expression(peaks: list[float], fps: int, amount: float = 0.12, width: float = 1.2,
+                    attack: float = 0.15, hold: float = 0.5) -> str:
+    """Expressão de zoom (zoompan, variável `in` = nº do frame): "punch-in" em cada pico.
 
-    z = 1 + amount * Σ bump(t - pico); bump suave de largura total 2*width, pico no instante do pico.
+    Entra rápido (attack s antes do pico), segura `hold` s e sai suave em `width` s (cosseno).
     """
     if not peaks:
         return "1"
+    t = f"in/{fps}"
     terms = []
     for p in peaks:
-        terms.append(f"if(lt(abs(in/{fps}-{p:.2f}),{width:.2f}),0.5+0.5*cos(PI*(in/{fps}-{p:.2f})/{width:.2f}),0)")
+        a0, h1, w1 = max(0.0, p - attack), p + hold, p + hold + width
+        terms.append(f"if(between({t},{a0:.2f},{p:.2f}),({t}-{a0:.2f})/{max(p - a0, 0.01):.2f},"
+                     f"if(between({t},{p:.2f},{h1:.2f}),1,"
+                     f"if(between({t},{h1:.2f},{w1:.2f}),0.5+0.5*cos(PI*({t}-{h1:.2f})/{width:.2f}),0)))")
     return f"1+{amount:.3f}*({'+'.join(terms)})"
 
 
@@ -307,11 +312,16 @@ class Renderer:
         return out, round(real, 1)
 
     # ------------------------------------------------------------------
+    def _keep(self) -> float:
+        """Fração da largura do vídeo original mantida no centro (1.0 = vídeo inteiro)."""
+        return min(1.0, max(0.4, float(self.e.get("center_crop", 1.0))))
+
     def _layout(self, streamer: Streamer, src: tuple[int, int]) -> dict:
         """Geometria do foreground: gameplay (e facecam) em px do canvas 1080x1920."""
         w, h = int(self.e.get("width", 1080)), int(self.e.get("height", 1920))
         src_w, src_h = src
-        game_h = _even(w * src_h / src_w)
+        keep = self._keep()
+        game_h = _even(w * src_h / (src_w * keep))  # recorte central: gameplay maior na tela vertical
         if not streamer.facecam:
             return {"mode": "center", "game": (w, game_h, (h - game_h) // 2), "face": None}
         fc = streamer.facecam
@@ -346,11 +356,14 @@ class Renderer:
             parts.append(f"[0:v]fps={fps},split={n_split}{labels}")
             parts.append(f"[bg]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},eq=brightness=-1[bgb]")
         zoom_cfg = self.e.get("zoom", {})
+        crop_w = _even(src[0] * self._keep())
+        fg_crop = f"crop={crop_w}:ih:{(src[0] - crop_w) // 2}:0," if crop_w < src[0] else ""
         if peaks:
-            z = zoom_expression(peaks, fps, float(zoom_cfg.get("amount", 0.12)), float(zoom_cfg.get("width_seconds", 1.2)))
-            parts.append(f"[fg]zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={game_w}x{game_h}:fps={fps}[fgs]")
+            z = zoom_expression(peaks, fps, float(zoom_cfg.get("amount", 0.12)), float(zoom_cfg.get("width_seconds", 1.2)),
+                                float(zoom_cfg.get("attack_seconds", 0.15)), float(zoom_cfg.get("hold_seconds", 0.5)))
+            parts.append(f"[fg]{fg_crop}zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={game_w}x{game_h}:fps={fps}[fgs]")
         else:
-            parts.append(f"[fg]scale={game_w}:{game_h}:flags=lanczos[fgs]")
+            parts.append(f"[fg]{fg_crop}scale={game_w}:{game_h}:flags=lanczos[fgs]")
         parts.append(f"[bgb][fgs]overlay=(W-w)/2:{game_y}:shortest=1[v1]")
         last = "v1"
         if lay["face"]:

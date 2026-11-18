@@ -36,12 +36,12 @@ def test_layout_center_and_split():
     r.cfg, r.e = cfg, cfg.settings.section("edit")
     plain = Streamer(name="X", handle="x", platform="twitch", url="u")
     lay = r._layout(plain, (1920, 1080))
-    assert lay["mode"] == "center" and lay["game"] == (1080, 608, (1920 - 608) // 2)
+    assert lay["mode"] == "center" and lay["game"] == (1080, 868, (1920 - 868) // 2)
     cam = Streamer(name="Y", handle="y", platform="twitch", url="u", facecam={"x": 0.75, "y": 0.0, "w": 0.25, "h": 0.30})
     lay = r._layout(cam, (1920, 1080))
     face_w, face_h, face_y, crop = lay["face"]
     game_w, game_h, game_y = lay["game"]
-    assert lay["mode"] == "split" and face_w == 1080 and face_h % 2 == 0 and game_h == 608
+    assert lay["mode"] == "split" and face_w == 1080 and face_h % 2 == 0 and game_h == 868
     assert game_y == face_y + face_h  # gameplay logo abaixo da facecam
     assert crop[2] == 1440 and crop[0] == 480 and crop[3] == 0  # recorte do canto superior direito
     assert face_y >= 0 and game_y + game_h <= 1920
@@ -50,7 +50,7 @@ def test_layout_center_and_split():
     face_w2, face_h2, *_ = r._layout(tall, (1920, 1080))["face"]
     assert face_h2 == 760 and face_w2 < 1080
     graph, _ = r._filter_graph(Path("subs.ass"), cam, (1920, 1080), [3.0])
-    assert "split=3" in graph and "zoompan=" in graph and "crop=480:" in graph and "ass=subs.ass" in graph
+    assert "split=3" in graph and "zoompan=" in graph and "crop=480:" in graph and "crop=1344:ih:288:0" in graph and "ass=subs.ass" in graph
 
 
 def test_read_music_licenses(tmp_path):
