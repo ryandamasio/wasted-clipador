@@ -138,6 +138,14 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   Program Files (x86)) aberto pelo ReviewServer quando review.tunnel=true; URL em data/tunnel_url.txt. O classificador
   do auto mode negou rodar o cloudflared direto pelo shell: o túnel sobe pelo serviço, após reinício.
 
+- 18/11 (véspera do lançamento; Cellbit, Alanzoka e Rakin já jogando GTA 6): serviço tinha morrido às 02:07 (janela
+  minimizada fechada) -> tarefa agora roda oculta; túnel apaga URL velha ao subir (celular abria endereço morto; a URL
+  muda a cada reinício). Monitor prioriza títulos de GTA, ignora RERUN e preempta gravação não-GTA. Edição: recorte
+  central 70% (edit.center_crop), zoom punch (attack/hold/release), legenda sem sobreposição + pop + junção de
+  fragmentos "-it", legenda posicionada pelo layout (abaixo do gameplay / 70% no split) porque o GTA 6 tem legenda
+  própria embaixo, recorte do split desliza para longe da facecam, títulos com palavrão mascarado. Facecam medida:
+  cellbit, alanzoka, rakin.
+
 ## Decisões registradas
 - Streamers iniciais por pesquisa (Streams Charts 2025): Coringa (Kick, nº1 em GTA BR), PaulinhoLOKObr, Gaules,
   Baiano, Alanzoka. "David Jones" do pedido provavelmente é Davy Jones (Gameplayrj), desabilitado até confirmar.
