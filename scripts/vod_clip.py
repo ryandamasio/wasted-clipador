@@ -47,6 +47,7 @@ def main() -> int:
     ap.add_argument("--score", type=float, required=True)
     ap.add_argument("--title", required=True)
     ap.add_argument("--note", required=True)
+    ap.add_argument("--facecam", help="x,y,w,h da câmera nesse trecho (frações) ou none")
     ap.add_argument("--quality", default="1080p60/720p60/best")
     ap.add_argument("--vod-start", default=time.strftime("%Y-%m-%d") + " 07:25:00", help="hora real em que o VOD começou")
     args = ap.parse_args()
@@ -85,6 +86,8 @@ def main() -> int:
     text = " ".join(w[2] for w in inside)
     reasons = {"notes": [f"curadoria (VOD): {args.note}"], "curated": True, "content": analyze(text), "chat": None, "audio": 0,
                "transcript": 0, "keywords": 0, "keywords_found": [], "title": args.title}
+    if args.facecam:
+        reasons["facecam"] = None if args.facecam == "none" else dict(zip("xywh", (float(v) for v in args.facecam.split(","))))
     mid = db.add_moment(stream_id, seg_id, vod_epoch + start, vod_epoch + end, vod_epoch + peak, args.score, reasons, text,
                         [[round(vod_epoch + w[0], 3), round(vod_epoch + w[1], 3), w[2]] for w in inside])
     v = lambda t: f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{int(t % 60):02d}"

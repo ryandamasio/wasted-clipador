@@ -91,6 +91,39 @@ def test_short_moment_is_extended_to_one_minute(tmp_path):
     db.close()
 
 
+def test_moment_past_end_of_ended_recording_slides_back(tmp_path):
+    from clipador.edit.render import MediaNotReady
+    from clipador.orchestrator import Orchestrator
+
+    cfg = load_config()
+    db = Database(tmp_path / "t.sqlite")
+    sid = db.create_stream("coringa", "kick", "https://kick.com/coringa", tmp_path)
+    db.end_stream(sid, "ended")
+    for i in range(2):
+        p = tmp_path / f"s{i}.ts"; p.write_bytes(b"0")
+        db.add_segment(sid, i, p, 100.0 + 120 * i, 220.0 + 120 * i)       # mídia até 340
+    mid = db.add_moment(sid, None, 300.0, 372.0, 305.0, 80.0, {"notes": []}, "t", [])   # termina depois da mídia
+    orch = Orchestrator(cfg, db)
+    seen = {}
+
+    class FakeRenderer:
+        def render(self, m, segments, streamer, out_dir, live, long_segments=None):
+            seen.update(start=m["start_ts"], end=m["end_ts"])
+            raise MediaNotReady("teste")
+
+    orch.renderer = FakeRenderer()
+    orch.process_moment(db.get_moment(mid))
+    assert seen["end"] == 340.0 and seen["end"] - seen["start"] >= 62
+    short = db.add_moment(sid, None, 90.0, 400.0, 95.0, 80.0, {"notes": []}, "t", [])
+    sid2 = db.create_stream("coringa", "kick", "u", tmp_path); db.end_stream(sid2, "ended")
+    p = tmp_path / "x.ts"; p.write_bytes(b"0")
+    db.add_segment(sid2, 0, p, 1000.0, 1030.0)                             # só 30 s de mídia
+    m2 = db.add_moment(sid2, None, 1000.0, 1072.0, 1005.0, 80.0, {"notes": []}, "t", [])
+    orch.process_moment(db.get_moment(m2))
+    assert db.get_moment(m2)["status"] == "failed"
+    db.close()
+
+
 def test_gta_and_rerun_titles():
     from clipador.orchestrator import is_gta, is_rerun
 

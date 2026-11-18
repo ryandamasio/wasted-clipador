@@ -9,6 +9,7 @@ Tudo se comunica pelo SQLite, então o processo pode cair e retomar de onde paro
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import re
@@ -300,6 +301,10 @@ class Orchestrator:
             self.db.update("moments", m["id"], status="failed")
             return True
         live = stream["status"] == "live"
+        reasons0 = json.loads(m["reasons"]) if isinstance(m.get("reasons"), str) else (m.get("reasons") or {})
+        if isinstance(reasons0, dict) and "facecam" in reasons0:
+            # o streamer mudou a câmera de lugar nesse trecho: região medida no próprio corte (ou null = sem câmera)
+            streamer = dataclasses.replace(streamer, facecam=reasons0["facecam"])
         min_s = float(self.cfg.settings.get("detect.clip.min_seconds", 0) or 0)
         if m["end_ts"] - m["start_ts"] < min_s:
             # todo clipe >= min_seconds (monetização): estica para trás, ganhando contexto antes do pico
@@ -307,6 +312,20 @@ class Orchestrator:
             self.db.update("moments", m["id"], start_ts=new_start)
             m = {**m, "start_ts": new_start}
         segments = self.db.segments_covering(stream["id"], m["start_ts"] - 1, m["end_ts"] + 1)
+        if not live and segments and min_s:
+            # gravação acabou antes do fim do corte: recua a janela para dentro da mídia em vez de sair curto
+            last_end = max(s["end_ts"] for s in segments)
+            if m["end_ts"] > last_end + 0.5:
+                prior = self.db.segments_covering(stream["id"], last_end - min_s - 120, last_end)
+                first_start = min(s["start_ts"] for s in prior) if prior else last_end
+                new_start = max(first_start, last_end - max(min_s, m["end_ts"] - m["start_ts"]))
+                if last_end - new_start < min_s - 2:
+                    self.db.update("moments", m["id"], status="failed")
+                    log.warning("momento %d: só %.0fs de mídia (< %.0fs): descartado", m["id"], last_end - new_start, min_s)
+                    return True
+                self.db.update("moments", m["id"], start_ts=new_start, end_ts=last_end)
+                m = {**m, "start_ts": new_start, "end_ts": last_end, "peak_ts": min(m["peak_ts"], last_end - 1)}
+                segments = self.db.segments_covering(stream["id"], m["start_ts"] - 1, m["end_ts"] + 1)
         long_max = float(self.cfg.settings.get("edit.long_version.max_seconds", 95))
         long_segments = self.db.segments_covering(stream["id"], m["start_ts"] - 1, m["start_ts"] + long_max + 1)
         self.db.update("moments", m["id"], status="editing")
