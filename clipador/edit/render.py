@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import math
 import random
 import re
@@ -427,6 +428,8 @@ class Renderer:
     def _render_video(self, concat: Path, offset: float, duration: float, ass_path: Path, streamer: Streamer,
                       out: Path, cwd: Path, src: tuple[int, int], peaks: list[float]) -> str:
         graph, extra_inputs = self._filter_graph(ass_path, streamer, src, peaks)
+        # arquivo temporário próprio: um ffmpeg órfão de um reinício nunca escreve no mesmo arquivo que o render novo
+        tmp = out.with_name(f"{out.stem}.{os.getpid()}.{int(time.time())}.tmp{out.suffix}")
         encoders = [self.e.get("encoder", "h264_nvenc"), "libx264"]
         last_err = ""
         for enc in dict.fromkeys(encoders):
@@ -442,12 +445,14 @@ class Renderer:
                 cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-maxrate", str(self.e.get("max_bitrate", "12M")),
                         "-bufsize", "16M", "-profile:v", "high"]
             cmd += ["-g", str(int(self.e.get("fps", 30)) * 2), "-c:a", "aac", "-b:a", str(self.e.get("audio_bitrate", "192k")),
-                    "-ar", "48000", "-movflags", "+faststart", "-shortest", str(out)]
+                    "-ar", "48000", "-movflags", "+faststart", "-shortest", str(tmp)]
             t0 = time.time()
             proc = subprocess.run(cmd, capture_output=True, cwd=str(cwd), timeout=900)
-            if proc.returncode == 0 and out.exists() and out.stat().st_size > 10_000:
+            if proc.returncode == 0 and tmp.exists() and tmp.stat().st_size > 10_000:
+                os.replace(tmp, out)
                 log.info("renderizado com %s em %.1fs (zoom em %s) -> %s", enc, time.time() - t0, peaks or "nada", out)
                 return enc
+            tmp.unlink(missing_ok=True)
             last_err = proc.stderr.decode("utf-8", "replace")[-600:]
             log.warning("encoder %s falhou: %s", enc, last_err.strip()[:300])
         raise RuntimeError(f"render falhou com todos os encoders: {last_err}")

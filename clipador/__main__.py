@@ -36,7 +36,9 @@ def _db(cfg) -> Database:
 
 def cmd_run(args, cfg) -> int:
     from clipador.orchestrator import Orchestrator
+    from clipador.procjob import bind_children_to_this_process
 
+    bind_children_to_this_process()  # gravadores/renders morrem junto se o serviço cair ou for reiniciado
     Orchestrator(cfg, _db(cfg)).run()
     return 0
 
