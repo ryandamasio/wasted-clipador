@@ -147,6 +147,11 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   cellbit, alanzoka, rakin.
   Dono pediu (18/11): TODO clipe >= 1 min (monetização). detect.clip 62-95 s, pre_roll 6 s, 2 momentos/segmento,
   gap 75 s; orchestrator estica momentos curtos para trás antes do render; recut 60-180 s; long_version desligada.
+  Dono pediu (18/11): SÓ cortes de GTA 6. capture.only_gta (título com GTA 6/VI/Vice City; GTA V/RP fora), recheca
+  título de quem grava e para quem troca de jogo, max_concurrent 4. Davy Jones = youtube @Gameplayrj/live (240 mil
+  simultâneos no 1º dia). Clipes não-GTA 6 e de lives pré-lançamento (16-17/11) arquivados (status `archived`).
+  Detecção: pico só de chat (sem grito/reação) x0.8. Títulos: frase com reação/pergunta/fail, trecho <= 48 chars.
+  Chat do YouTube via yt-dlp (chat-downloader parou). "alanzokagta6" na Kick = reupload não oficial, ignorado.
 
 ## Decisões registradas
 - Streamers iniciais por pesquisa (Streams Charts 2025): Coringa (Kick, nº1 em GTA BR), PaulinhoLOKObr, Gaules,
