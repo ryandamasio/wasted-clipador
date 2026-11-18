@@ -219,7 +219,7 @@ class Renderer:
 
         # 2) legenda ASS (variação de posição entre clipes)
         subs = self.e.get("subtitles", {})
-        margin_v = int(random.choice(subs.get("margin_v_options", [560])))
+        margin_v = self._subtitle_margin(streamer, (src_w, src_h))
         ass_path = out_dir / "subs.ass"
         ass_path.write_text(build_ass(words, subs, int(self.e.get("width", 1080)), int(self.e.get("height", 1920)), margin_v),
                             encoding="utf-8")
@@ -312,6 +312,23 @@ class Renderer:
         return out, round(real, 1)
 
     # ------------------------------------------------------------------
+    def _subtitle_margin(self, streamer: Streamer, src: tuple[int, int], rng: random.Random | None = None) -> int:
+        """MarginV (px da base até o pé do texto) que não cobre a legenda do próprio jogo nem o crédito.
+
+        center: logo abaixo do gameplay; split: a 70% da altura do gameplay (acima da faixa de legenda do jogo).
+        Variação aleatória de ±20 px entre clipes para não parecer feito em série.
+        """
+        h = int(self.e.get("height", 1920))
+        font = int(self.e.get("subtitles", {}).get("font_size", 78))
+        lay = self._layout(streamer, src)
+        _, game_h, game_y = lay["game"]
+        if lay["mode"] == "center":
+            margin = h - (game_y + game_h) - 24 - int(1.25 * font)
+        else:
+            margin = h - (game_y + int(0.70 * game_h))
+        margin += (rng or random).randint(-20, 20)
+        return max(190, min(margin, h - 300))  # 190: acima do crédito "Clipe: @..." (y = h-150)
+
     def _keep(self) -> float:
         """Fração da largura do vídeo original mantida no centro (1.0 = vídeo inteiro)."""
         return min(1.0, max(0.4, float(self.e.get("center_crop", 1.0))))
@@ -357,7 +374,16 @@ class Renderer:
             parts.append(f"[bg]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},eq=brightness=-1[bgb]")
         zoom_cfg = self.e.get("zoom", {})
         crop_w = _even(src[0] * self._keep())
-        fg_crop = f"crop={crop_w}:ih:{(src[0] - crop_w) // 2}:0," if crop_w < src[0] else ""
+        crop_x = (src[0] - crop_w) // 2
+        if lay["face"] and crop_w < src[0]:
+            # facecam já aparece em cima: desliza o recorte para longe dela, sem rosto duplicado no gameplay
+            fx, fw = float(streamer.facecam.get("x", 0)), float(streamer.facecam.get("w", 0.25))
+            if fx + fw / 2 >= 0.5:
+                crop_x = max(0, min(crop_x, int(src[0] * fx) - crop_w))
+            else:
+                crop_x = min(src[0] - crop_w, max(crop_x, int(src[0] * (fx + fw))))
+            crop_x = crop_x // 2 * 2
+        fg_crop = f"crop={crop_w}:ih:{crop_x}:0," if crop_w < src[0] else ""
         if peaks:
             z = zoom_expression(peaks, fps, float(zoom_cfg.get("amount", 0.12)), float(zoom_cfg.get("width_seconds", 1.2)),
                                 float(zoom_cfg.get("attack_seconds", 0.15)), float(zoom_cfg.get("hold_seconds", 0.5)))

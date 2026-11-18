@@ -144,7 +144,6 @@ edit:
     shadow: 1
     max_words_per_line: 3
     max_line_seconds: 1.8
-    margin_v_options: [520, 560, 620]   # variação de posição entre clipes (px a partir da base)
     uppercase: true
   credit:
     enabled: true

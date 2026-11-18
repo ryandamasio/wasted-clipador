@@ -28,6 +28,16 @@ def test_generate_copy_has_three_titles_and_all_networks():
     assert "Clipe de Coringa" in data["credit"]
 
 
+def test_titles_censor_profanity():
+    from clipador.copy.generator import censor
+
+    assert censor("Caralho, mano, que porra é essa") == "C*ralho, mano, que p*rra é essa"
+    assert censor("cuidado com a curva") == "cuidado com a curva"  # não pega pedaço de palavra
+    cfg = load_config()
+    data = generate_copy(cfg, cfg.streamer("alanzoka"), _moment(9, transcript="Caralho, mano, o cara é bom demais velho."))
+    assert all("aralho" not in t or "*" in t for t in data["titles"])
+
+
 def test_generate_copy_is_deterministic_per_moment():
     cfg = load_config()
     s = cfg.streamer("gaules")

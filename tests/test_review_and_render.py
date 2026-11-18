@@ -50,7 +50,28 @@ def test_layout_center_and_split():
     face_w2, face_h2, *_ = r._layout(tall, (1920, 1080))["face"]
     assert face_h2 == 760 and face_w2 < 1080
     graph, _ = r._filter_graph(Path("subs.ass"), cam, (1920, 1080), [3.0])
-    assert "split=3" in graph and "zoompan=" in graph and "crop=480:" in graph and "crop=1344:ih:288:0" in graph and "ass=subs.ass" in graph
+    assert "split=3" in graph and "zoompan=" in graph and "crop=480:" in graph and "crop=1344:ih:96:0" in graph and "ass=subs.ass" in graph
+
+
+def test_subtitle_margin_avoids_game_subtitles_and_credit():
+    import random as _r
+
+    cfg = load_config()
+    r = Renderer.__new__(Renderer)
+    r.cfg, r.e = cfg, cfg.settings.section("edit")
+    plain = Streamer(name="X", handle="x", platform="twitch", url="u")
+    cam = Streamer(name="Y", handle="y", platform="twitch", url="u", facecam={"x": 0.0, "y": 0.0, "w": 0.25, "h": 0.27})
+    for s in (plain, cam):
+        lay = r._layout(s, (1920, 1080))
+        _, gh, gy = lay["game"]
+        for seed in range(20):
+            m = r._subtitle_margin(s, (1920, 1080), _r.Random(seed))
+            text_bottom = 1920 - m
+            assert text_bottom <= 1920 - 190  # acima do crédito
+            if lay["mode"] == "center":
+                assert text_bottom - 98 >= gy + gh - 20  # texto abaixo do gameplay, não sobre a legenda do jogo
+            else:
+                assert gy + gh * 0.6 <= text_bottom <= gy + gh * 0.8
 
 
 def test_read_music_licenses(tmp_path):

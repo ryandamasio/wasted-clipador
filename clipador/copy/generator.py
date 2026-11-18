@@ -44,8 +44,16 @@ DESCRIPTION_TEMPLATE = (
 )
 
 
+_PROFANITY = re.compile(r"\b(caralh\w*|porra\w*|puta\w*|merda\w*|foda\w*|fod\w+|cu|buceta\w*|viad\w*|desgra[cç]\w*|pqp)\b", re.I)
+
+
+def censor(text: str) -> str:
+    """Palavrão no título derruba a monetização: 'caralho' -> 'c*ralho' (a fala na legenda continua intacta)."""
+    return _PROFANITY.sub(lambda m: m.group(0)[0] + "*" + m.group(0)[2:] if len(m.group(0)) > 2 else m.group(0)[0] + "*", text)
+
+
 def _clean_quote(text: str, max_len: int = 48) -> str:
-    text = re.sub(r"\s+", " ", text).strip(" .,!?")
+    text = censor(re.sub(r"\s+", " ", text).strip(" .,!?"))
     if len(text) <= max_len:
         return text
     cut = text[:max_len].rsplit(" ", 1)[0]
