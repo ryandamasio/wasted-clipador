@@ -11,6 +11,7 @@ import numpy as np
 from clipador.config import Config
 from clipador.detect import signals as sig
 from clipador.detect.audio import decode_audio, per_second_energy_signal
+from clipador.detect.content import adjust, analyze
 from clipador.detect.llm import LLMScorer
 from clipador.detect.scorer import combine, overlap_ratio, pick_peaks, refine_bounds
 from clipador.detect.transcribe import Transcriber, Transcript
@@ -170,6 +171,13 @@ class Detector:
                 "sensitive": sensitive,
             }
             final_score = float(score[p])
+            content = analyze(text)
+            comps["content"] = content
+            final_score = adjust(final_score, content, float(self.d.get("chat_talk_penalty", 0.5)))
+            if content["chat_talk"] >= 2 and content["chat_talk"] > len(content["viral"]):
+                if final_score < min_score:
+                    log.info("pico em %.0fs descartado: conversa com o chat/subs (%d sinais)", p, content["chat_talk"])
+                    continue
             if chat_only(comps):
                 # só o chat subiu (spam de emote/inscrições), sem grito nem reação na fala: raramente viraliza
                 final_score *= float(self.d.get("chat_only_penalty", 0.8))
@@ -204,6 +212,11 @@ class Detector:
             notes.append("reação forte na fala")
         if c.get("keywords_found"):
             notes.append("GTA: " + ", ".join(c["keywords_found"][:3]))
+        content = c.get("content") or {}
+        if content.get("viral"):
+            notes.append("reação: " + ", ".join(content["viral"][:3]))
+        if content.get("chat_talk", 0) >= 2:
+            notes.append(f"conversa com o chat ({content['chat_talk']} sinais)")
         if c.get("llm"):
             notes.append(f"LLM {c['llm']['score']:.0f}/10: {c['llm'].get('reason', '')}")
         return notes or ["sinal combinado acima do limiar"]
