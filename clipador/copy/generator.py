@@ -54,6 +54,7 @@ def censor(text: str) -> str:
 
 def _clean_quote(text: str, max_len: int = 48) -> str:
     text = censor(re.sub(r"\s+", " ", text).strip(" .,!?"))
+    text = text[:1].upper() + text[1:]
     if len(text) <= max_len:
         return text
     cut = text[:max_len].rsplit(" ", 1)[0]
@@ -63,10 +64,27 @@ def _clean_quote(text: str, max_len: int = 48) -> str:
 def _pick_quote(transcript: str, rng: random.Random) -> str | None:
     if not transcript:
         return None
-    sentences = re.split(r"(?<=[.!?])\s+", transcript)
-    sentences = [s for s in sentences if 12 <= len(s) <= 70]
+    sentences = []
+    for s in re.split(r"(?<=[.!?])\s+", transcript):
+        clauses = [c.strip() for c in s.split(",") if c.strip()]
+        # frase inteira ou trechos contíguos entre vírgulas que caibam no título
+        for i in range(len(clauses)):
+            for j in range(i + 1, len(clauses) + 1):
+                part = ", ".join(clauses[i:j])
+                if 12 <= len(part) <= 48:  # cabe inteiro na citação do título (_clean_quote corta em 48)
+                    sentences.append(part)
     if sentences:
-        return _clean_quote(rng.choice(sentences))
+        # frase com reação ("apertei o botão errado", "não acredito") vende o clipe; entre iguais, a mais curta
+        # (mais direta, sem lixo de transcrição na ponta); o sorteio só desempata o resto
+        from clipador.detect.signals import TRANSCRIPT_HYPE, _norm
+
+        hype = [_norm(h) for h in TRANSCRIPT_HYPE + ["errado", "errei", "bugou", "destrui", "acabei de", "nunca", "pior", "melhor"]]
+        # pergunta prende ("posso levar o Louro José?"); palavrão sozinho ("C*ralhada") não diz nada
+        hits = {s: sum(h in _norm(s) for h in hype) + ("?" in s) - (len(s.split()) <= 2) for s in sentences}
+        best = max(hits.values())
+        top = [s for s in sentences if hits[s] == best]
+        shortest = min(len(s) for s in top)
+        return _clean_quote(rng.choice([s for s in top if len(s) <= shortest + 6]))
     return _clean_quote(transcript) if len(transcript) >= 12 else None
 
 

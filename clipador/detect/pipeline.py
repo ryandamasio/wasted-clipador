@@ -19,6 +19,11 @@ from clipador.store.db import Database
 log = logging.getLogger("detect.pipeline")
 
 
+def chat_only(comps: dict) -> bool:
+    """Chat explodiu mas o streamer não reagiu (áudio < 0.4 e fala < 0.3)."""
+    return (comps.get("chat") or 0) >= 0.5 and comps.get("audio", 0) < 0.4 and comps.get("transcript", 0) < 0.3
+
+
 class Detector:
     def __init__(self, cfg: Config, db: Database):
         self.cfg = cfg
@@ -165,6 +170,12 @@ class Detector:
                 "sensitive": sensitive,
             }
             final_score = float(score[p])
+            if chat_only(comps):
+                # só o chat subiu (spam de emote/inscrições), sem grito nem reação na fala: raramente viraliza
+                final_score *= float(self.d.get("chat_only_penalty", 0.8))
+                if final_score < min_score:
+                    log.info("pico em %.0fs descartado: só chat, sem reação (nota %.0f)", p, final_score)
+                    continue
             if self.llm.enabled and final_score >= float(self.d.get("llm", {}).get("min_score_to_call", 40)):
                 sample = [m["text"] for m in messages if seg_chat_start + start_rel <= m["ts"] <= seg_chat_start + end_rel][:12]
                 llm = self.llm.score(stream["streamer"], text, sample)

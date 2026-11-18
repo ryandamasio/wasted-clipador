@@ -61,3 +61,12 @@ def test_overlap_ratio():
     assert overlap_ratio(0, 10, 5, 15) == 0.5
     assert overlap_ratio(0, 10, 20, 30) == 0.0
     assert overlap_ratio(0, 10, 2, 8) == 1.0
+
+
+def test_chat_only_moments_are_flagged():
+    from clipador.detect.pipeline import chat_only
+
+    assert chat_only({"chat": 0.98, "audio": 0.06, "transcript": 0.0})          # spam de emote, streamer quieto
+    assert not chat_only({"chat": 0.92, "audio": 0.82, "transcript": 0.83})     # chat + grito + reação
+    assert not chat_only({"chat": 0.6, "audio": 0.1, "transcript": 0.5})        # reação na fala basta
+    assert not chat_only({"chat": None, "audio": 0.1, "transcript": 0.1})       # sem chat

@@ -62,3 +62,14 @@ def test_db_roundtrip(tmp_path):
     db.update("moments", mid, status="clipped")
     assert len(db.old_processed_segments(9e12)) == 1
     assert db.segments_covering(sid, 149.0, 176.0)[0]["id"] == seg
+
+
+def test_title_quote_prefers_reaction_sentence():
+    import random
+
+    from clipador.copy.generator import _pick_quote
+
+    t = ("Mano, eu repotou, repotou, eu apertei o botão errado, caralho, eu acabei de consertar meu carro! "
+         "Eu ganhei dinheiro do Brian, pelo menos. Eu tenho que chegar, pra chegar nele.")
+    for seed in range(5):
+        assert "errado" in _pick_quote(t, random.Random(seed)) or "consertar" in _pick_quote(t, random.Random(seed))

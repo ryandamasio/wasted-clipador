@@ -89,7 +89,7 @@ streamers:
     display: "@Gameplayrj"
     channel_link: https://www.youtube.com/@Gameplayrj
     enabled: true
-    facecam: null
+    facecam: {x: 0.783, y: 0.096, w: 0.215, h: 0.215}   # medido 18/11 (GTA 6, GameplayRJ): caixa no canto sup. direito
     chat_offset_seconds: null
 
   - name: Pedro
