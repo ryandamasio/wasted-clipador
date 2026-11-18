@@ -63,7 +63,7 @@ streamers:
     handle: alanzoka
     platform: twitch
     url: https://www.twitch.tv/alanzoka
-    priority: 3
+    priority: 1
     display: "@alanzoka"
     channel_link: https://www.twitch.tv/alanzoka
     enabled: true
@@ -84,8 +84,8 @@ streamers:
   - name: Davy Jones
     handle: davyjones
     platform: youtube
-    url: https://www.youtube.com/@livesdodavyjonesoficial1430/live    # canal de lives do Davy Jones (Gameplayrj), confirmado 14/11
-    priority: 4
+    url: https://www.youtube.com/@Gameplayrj/live    # 18/11: live de GTA 6 no canal PRINCIPAL (240 mil simultâneos); o de lives estava parado
+    priority: 1
     display: "@Gameplayrj"
     channel_link: https://www.youtube.com/@Gameplayrj
     enabled: true

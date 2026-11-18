@@ -29,7 +29,8 @@ from clipador.store.db import Database
 
 log = logging.getLogger("orchestrator")
 
-_GTA_RE = re.compile(r"\bgta\b|gta ?(6|vi)\b|vice city|grand theft|leonida", re.I)
+# só GTA 6 (GTA V / GTA RP não conta): pedido do dono em 18/11
+_GTA_RE = re.compile(r"\bgta ?(6|vi)\b|\bgta6\b|vice city|leonida|grand theft auto vi\b", re.I)
 _RERUN_RE = re.compile(r"\brerun\b|\breprise\b|\breprisando\b", re.I)
 
 
@@ -155,9 +156,14 @@ class Orchestrator:
                 active = set(self.recorders)
                 candidates = [s for s in self.cfg.enabled_streamers if s.handle not in active]
                 slots = int(self.cap.get("max_concurrent", 3)) - len(active)
+                only_gta = bool(self.cap.get("only_gta", False))
+                if only_gta and active:
+                    self._drop_non_gta(pool)
+                    active = set(self.recorders)
+                    slots = int(self.cap.get("max_concurrent", 3)) - len(active)
                 if candidates:
                     results = list(pool.map(lambda s: (s, *self._safe_check(s)), candidates))
-                    online = [(s, t) for s, ok, t in results if ok and not is_rerun(t)]
+                    online = [(s, t) for s, ok, t in results if ok and not is_rerun(t) and (is_gta(t) or not only_gta)]
                     # quem joga GTA primeiro; empate pela prioridade do streamers.yaml (lista já ordenada)
                     online.sort(key=lambda st: not is_gta(st[1]))
                     for s, title in online:
@@ -170,6 +176,22 @@ class Orchestrator:
                             log.info("[%s] online mas sem slot livre (max_concurrent=%s)", s.handle,
                                      self.cap.get("max_concurrent"))
             self.stop_event.wait(interval)
+
+    def _drop_non_gta(self, pool) -> None:
+        """Modo só-GTA: recheca o título de quem está sendo gravado e para quem trocou de jogo."""
+        with self._rec_lock:
+            current = list(self.recorders.items())
+        checks = pool.map(lambda hr: (hr, *self._safe_check(self.cfg.streamer(hr[0]) or hr[1][0].streamer)), current)
+        for (handle, (rec, chat)), online, title in checks:
+            if online and title:
+                rec.title = title
+            if online and title and not is_gta(title):
+                log.info("[%s] saiu do GTA 6 (%s): parando a gravação", handle, title[:60])
+                rec.stop()
+                if chat:
+                    chat.stop()
+                rec.join(timeout=20)
+        self._reap_recorders()
 
     def _preempt_non_gta(self, for_handle: str) -> int:
         """Para uma gravação que não é de GTA (ou é reprise) para abrir vaga a quem está jogando GTA. Retorna vagas liberadas."""

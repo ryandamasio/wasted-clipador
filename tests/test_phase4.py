@@ -94,7 +94,8 @@ def test_short_moment_is_extended_to_one_minute(tmp_path):
 def test_gta_and_rerun_titles():
     from clipador.orchestrator import is_gta, is_rerun
 
-    assert is_gta("GTA 6. (jogando no PS5)") and is_gta("VICE CITY BABYYYY") and is_gta("gta rp cidade alta")
+    assert is_gta("GTA 6. (jogando no PS5)") and is_gta("VICE CITY BABYYYY") and is_gta("+18 SPEEDRUN DE GTA VI")
+    assert not is_gta("gta rp cidade alta") and not is_gta("GTA V online")
     assert not is_gta("367 | noitinha :)") and not is_gta(None) and not is_gta("agtap")
     assert is_rerun("RERUN: Lobby do Alastro!") and not is_rerun("GTA 6 ao vivo")
 

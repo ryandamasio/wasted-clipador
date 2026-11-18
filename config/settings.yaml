@@ -11,7 +11,8 @@ paths:
 
 capture:
   poll_interval_seconds: 60        # intervalo para checar quem está online
-  max_concurrent: 3                # lives gravadas ao mesmo tempo
+  max_concurrent: 4                # lives gravadas ao mesmo tempo (4 desde 18/11: lançamento do GTA 6; olhe a fila do Whisper no Painel)
+  only_gta: true                   # só grava lives com GTA 6 no título (GTA V/RP não); para quem troca de jogo
   segment_seconds: 120             # tamanho de cada arquivo de gravação (menor = clipe pronto mais rápido)
   quality: "best"                  # qualidade do streamlink
   chat_offset_seconds: 7           # atraso médio da reação do chat em relação ao vídeo capturado (calibrado 14/11)
