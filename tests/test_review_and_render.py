@@ -124,10 +124,10 @@ def test_review_service_flow(tmp_path):
     assert db.get_clip(cid)["status"] == "rejected" and db.get_moment(mid)["status"] == "rejected"
     svc.restore(cid)
 
-    # recorte: começa 2 s antes, termina 3 s depois -> momento volta para a fila, clipe antigo substituído
-    svc.recut(cid, -2.0, 3.0)
+    # recorte: começa 20 s antes, termina 20 s depois (>= 1 min) -> momento volta para a fila, clipe antigo substituído
+    svc.recut(cid, -20.0, 20.0)
     m = db.get_moment(mid)
-    assert (m["start_ts"], m["end_ts"], m["status"], m["recut_count"]) == (148.0, 178.0, "new", 1)
+    assert (m["start_ts"], m["end_ts"], m["status"], m["recut_count"]) == (130.0, 195.0, "new", 1)
     assert db.get_clip(cid)["status"] == "superseded"
     assert db.pending_moments()[0]["id"] == mid
 
@@ -139,7 +139,7 @@ def test_review_service_flow(tmp_path):
     db.update("moments", mid, status="clipped")
     db.set_clip_status(cid, "ready")
     try:
-        svc.recut(cid, -40.0, 40.0)
+        svc.recut(cid, -100.0, 100.0)  # 265 s > 3 min
         assert False, "deveria falhar"
     except ReviewError:
         pass
@@ -174,7 +174,7 @@ def test_review_api(tmp_path):
     assert client.get(f"/media/{cid}/../x").status_code in (404, 400)
     r = client.post(f"/api/clips/{cid}/approve", json={"title": "T2"})
     assert r.status_code == 200 and r.json()["chosen_title"] == "T2"
-    assert client.post(f"/api/clips/{cid}/recut", json={"start_delta": -100}).status_code == 400
+    assert client.post(f"/api/clips/{cid}/recut", json={"start_delta": -300}).status_code == 400
     # a aprovação agendou um post por rede habilitada (4, todas manuais na config padrão)
     assert db.fetchone("SELECT COUNT(*) AS n FROM posts WHERE status='scheduled'")["n"] == 4
     r = client.post(f"/api/clips/{cid}/posted", json={"platforms": ["youtube", "tiktok"]})

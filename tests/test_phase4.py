@@ -66,6 +66,31 @@ def test_source_commands_kick_headless_flag_and_file_live(tmp_path):
     db.close()
 
 
+def test_short_moment_is_extended_to_one_minute(tmp_path):
+    from clipador.edit.render import MediaNotReady
+    from clipador.orchestrator import Orchestrator
+
+    cfg = load_config()
+    db = Database(tmp_path / "t.sqlite")
+    sid = db.create_stream("coringa", "kick", "https://kick.com/coringa", tmp_path)
+    seg = db.add_segment(sid, 0, tmp_path / "s.ts", 100.0, 220.0)
+    mid = db.add_moment(sid, seg, 150.0, 175.0, 152.0, 80.0, {"notes": []}, "t", [])
+    orch = Orchestrator(cfg, db)
+    seen = {}
+
+    class FakeRenderer:
+        def render(self, m, segments, streamer, out_dir, live, long_segments=None):
+            seen["dur"] = m["end_ts"] - m["start_ts"]
+            raise MediaNotReady("teste")
+
+    orch.renderer = FakeRenderer()
+    orch.process_moment(db.get_moment(mid))
+    min_s = float(cfg.settings.get("detect.clip.min_seconds"))
+    assert min_s >= 60 and seen["dur"] == min_s
+    assert db.get_moment(mid)["start_ts"] == 175.0 - min_s
+    db.close()
+
+
 def test_gta_and_rerun_titles():
     from clipador.orchestrator import is_gta, is_rerun
 

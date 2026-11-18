@@ -17,7 +17,7 @@ from clipador.store.db import Database
 
 log = logging.getLogger("review")
 
-MIN_CLIP, MAX_CLIP = 5.0, 60.0
+MIN_CLIP, MAX_CLIP = 60.0, 180.0  # >= 1 min (monetização); Shorts aceita até 3 min
 REJECT_REASONS = ["sem graça", "sem contexto", "corte ruim", "tema sensível", "repetido", "qualidade", "outro"]
 
 

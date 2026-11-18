@@ -278,6 +278,12 @@ class Orchestrator:
             self.db.update("moments", m["id"], status="failed")
             return True
         live = stream["status"] == "live"
+        min_s = float(self.cfg.settings.get("detect.clip.min_seconds", 0) or 0)
+        if m["end_ts"] - m["start_ts"] < min_s:
+            # todo clipe >= min_seconds (monetização): estica para trás, ganhando contexto antes do pico
+            new_start = m["end_ts"] - min_s
+            self.db.update("moments", m["id"], start_ts=new_start)
+            m = {**m, "start_ts": new_start}
         segments = self.db.segments_covering(stream["id"], m["start_ts"] - 1, m["end_ts"] + 1)
         long_max = float(self.cfg.settings.get("edit.long_version.max_seconds", 95))
         long_segments = self.db.segments_covering(stream["id"], m["start_ts"] - 1, m["start_ts"] + long_max + 1)
