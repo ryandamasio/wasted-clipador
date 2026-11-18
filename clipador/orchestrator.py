@@ -330,7 +330,8 @@ class Orchestrator:
             self.db.update("moments", m["id"], status="failed")
             return True
         reasons = json.loads(m["reasons"]) if isinstance(m["reasons"], str) else m["reasons"]
-        llm_title = (reasons.get("llm") or {}).get("title") if isinstance(reasons, dict) else None
+        # título escrito na curadoria vence; depois o do LLM (se ligado); senão os templates
+        llm_title = (reasons.get("title") or (reasons.get("llm") or {}).get("title")) if isinstance(reasons, dict) else None
         copy_data = generate_copy(self.cfg, streamer, m, llm_title, music=result.music)
         if result.long_video:
             copy_data["long_version"] = {"file": result.long_video.name, "seconds": round(result.long_duration or 0),

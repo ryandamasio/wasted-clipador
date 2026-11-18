@@ -59,6 +59,7 @@ def main() -> int:
     ap.add_argument("--phrase", required=True)
     ap.add_argument("--score", type=float, required=True)
     ap.add_argument("--note", required=True)
+    ap.add_argument("--title", help="título principal do post (gancho escrito à mão)")
     ap.add_argument("--day", default=time.strftime("%Y-%m-%d"))
     args = ap.parse_args()
     cfg = load_config()
@@ -77,7 +78,7 @@ def main() -> int:
     text = " ".join(w[2] for w in inside)
     seg_id, stream_id = words[i][4], words[i][3]
     reasons = {"notes": [f"curadoria: {args.note}"], "curated": True, "content": analyze(text), "chat": None,
-               "audio": 0, "transcript": 0, "keywords": 0, "keywords_found": []}
+               "audio": 0, "transcript": 0, "keywords": 0, "keywords_found": [], "title": args.title}
     from clipador.detect.scorer import overlap_ratio
 
     dupes = [m for m in db.moments_overlapping(stream_id, start, end)
