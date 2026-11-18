@@ -152,6 +152,14 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   simultâneos no 1º dia). Clipes não-GTA 6 e de lives pré-lançamento (16-17/11) arquivados (status `archived`).
   Detecção: pico só de chat (sem grito/reação) x0.8. Títulos: frase com reação/pergunta/fail, trecho <= 48 chars.
   Chat do YouTube via yt-dlp (chat-downloader parou). "alanzokagta6" na Kick = reupload não oficial, ignorado.
+  18/11 (noite): dono cobrou olhar viral de canal dark (pico de chat engana: Alanzoka agradecendo subs virou corte).
+  detect/content.py (conversa-com-chat x0.5, reações GTA 6 +5/cada até +20), cutscene = Whisper detect_language
+  inglês >= 0.5 em janelas de 30 s (+15, 1 a cada 20 min). Curadoria manual: scripts/scan.py (linha do tempo com
+  candidatos, marca CENA DO JOGO), scripts/curate.py (gravação) e scripts/vod_clip.py (VOD: baixa só o trecho em
+  1080p; --pre, --title, --facecam). Câmera por corte (reasons.facecam): Alanzoka muda a câmera de canto por cena.
+  BUGS sérios corrigidos: reinício deixava 94 ffmpeg/streamlink órfãos (agora job object, clipador/procjob.py) e um
+  ffmpeg órfão corrompeu um clipe (render agora grava em temp e troca). Para reiniciar: taskkill /T no `clipador run`.
+  VOD do Cellbit é só para inscritos (sem login). Download de VOD: ffmpeg -ss no m3u8 (yt-dlp -g) é o mais rápido.
 
 ## Decisões registradas
 - Streamers iniciais por pesquisa (Streams Charts 2025): Coringa (Kick, nº1 em GTA BR), PaulinhoLOKObr, Gaules,
