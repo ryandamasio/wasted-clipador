@@ -169,6 +169,7 @@ edit:
     width_seconds: 0.9             # saída suave
     max_per_clip: 3
     min_gap_seconds: 4
+  auto_facecam: true               # acha a câmera do streamer em cada corte (OpenCV); a do streamers.yaml vira reserva
   facecam_max_height: 760          # altura máxima da facecam no layout dividido (px)
   split_shift_up: 60               # desloca o conjunto facecam+gameplay para cima (deixa a legenda sobre o gameplay)
   long_version:                    # clip_long.mp4 extra; desligado desde 18/11 porque todo clipe já tem >= 1 min

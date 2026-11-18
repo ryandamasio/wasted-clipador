@@ -181,3 +181,14 @@ def test_review_api(tmp_path):
     assert r.json()["status"] == "posted"
     assert db.fetchone("SELECT COUNT(*) AS n FROM posts WHERE status='posted'")["n"] == 2
     assert client.get("/api/clips?status=posted").json()["clips"][0]["id"] == cid
+
+
+def test_facecam_choose_keeps_static_side_face_and_ignores_moving_center_faces():
+    from clipador.edit.facecam import choose
+
+    cam = (0.90, 0.20, 0.055, 0.095)                      # rosto do streamer parado no canto
+    frames = [[cam, (0.5 + 0.03 * i, 0.5, 0.15, 0.27)] for i in range(6)]   # rosto do jogo andando no centro
+    box = choose(frames)
+    assert box and box["x"] > 0.75 and box["y"] < 0.2 and 0.15 < box["w"] < 0.25
+    assert choose([[(0.5, 0.5, 0.1, 0.18)]] * 6) is None   # só rosto no centro (cutscene): sem câmera
+    assert choose([[cam]] * 2 + [[]] * 4) is None          # câmera em poucos quadros: não confia

@@ -334,7 +334,8 @@ class Orchestrator:
         clip_name = f"{streamer.handle}_{hhmmss}_m{m['id']}"
         out_dir = self.cfg.settings.path("output_dir") / day / clip_name
         try:
-            result = self.renderer.render(m, segments, streamer, out_dir, live, long_segments=long_segments)
+            result = self.renderer.render(m, segments, streamer, out_dir, live, long_segments=long_segments,
+                                          facecam_locked="facecam" in reasons0)
         except MediaNotReady as exc:
             if not live:
                 # live acabou (ou é arquivo) e a mídia não existe mais: não adianta esperar

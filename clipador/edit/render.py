@@ -9,6 +9,7 @@ streamer tem `facecam` configurado, música livre com ducking sob a voz.
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import os
@@ -202,7 +203,7 @@ class Renderer:
         self.transcriber = Transcriber.get(cfg.settings.get("detect.whisper", {}))
 
     def render(self, moment: dict, segments: list[dict], streamer: Streamer, out_dir: Path, stream_live: bool,
-               long_segments: list[dict] | None = None) -> RenderResult:
+               long_segments: list[dict] | None = None, facecam_locked: bool = False) -> RenderResult:
         out_dir.mkdir(parents=True, exist_ok=True)
         chosen, offset = source_for(moment, segments, stream_live)
         duration = min(moment["end_ts"], chosen[-1]["end_ts"]) - max(moment["start_ts"], chosen[0]["start_ts"])
@@ -210,6 +211,13 @@ class Renderer:
         concat = out_dir / "source.ffconcat"
         build_concat(chosen, concat)
         src_w, src_h = probe_video_size(Path(chosen[0]["path"]))
+        if self.e.get("auto_facecam", True) and not facecam_locked:
+            # a câmera muda de canto entre cenas: procura o rosto parado do streamer no próprio trecho
+            from clipador.edit.facecam import detect as detect_facecam
+
+            found = detect_facecam(concat, offset, duration)
+            if found:
+                streamer = dataclasses.replace(streamer, facecam=found)
 
         # 1) transcrição precisa do próprio clipe (timestamps relativos ao clipe)
         t0 = time.time()

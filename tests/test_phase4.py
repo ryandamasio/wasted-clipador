@@ -79,7 +79,7 @@ def test_short_moment_is_extended_to_one_minute(tmp_path):
     seen = {}
 
     class FakeRenderer:
-        def render(self, m, segments, streamer, out_dir, live, long_segments=None):
+        def render(self, m, segments, streamer, out_dir, live, long_segments=None, **kw):
             seen["dur"] = m["end_ts"] - m["start_ts"]
             raise MediaNotReady("teste")
 
@@ -107,7 +107,7 @@ def test_moment_past_end_of_ended_recording_slides_back(tmp_path):
     seen = {}
 
     class FakeRenderer:
-        def render(self, m, segments, streamer, out_dir, live, long_segments=None):
+        def render(self, m, segments, streamer, out_dir, live, long_segments=None, **kw):
             seen.update(start=m["start_ts"], end=m["end_ts"])
             raise MediaNotReady("teste")
 

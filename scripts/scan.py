@@ -134,12 +134,19 @@ def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
     ap.add_argument("--stream", type=int, action="append")
+    ap.add_argument("--streamer", help="todas as gravações desse streamer desde --since")
+    ap.add_argument("--since", default="00:00", help="HH:MM de hoje")
     ap.add_argument("--audio")
     ap.add_argument("--top", type=int, default=15)
     args = ap.parse_args()
     cfg = load_config()
     db = Database(cfg.settings.path("db_path"))
     import time as _t
+    if args.streamer:
+        since = _t.mktime(_t.strptime(_t.strftime("%Y-%m-%d ") + args.since, "%Y-%m-%d %H:%M"))
+        args.stream = [r["id"] for r in db.fetchall(
+            "SELECT DISTINCT s.id FROM streams s JOIN segments g ON g.stream_id=s.id WHERE s.streamer=? AND g.start_ts>=? AND s.url NOT LIKE '%/videos/%'",
+            [args.streamer, since])]
     if args.audio:
         words = words_from_audio(Path(args.audio))
         scan(words, 0.0, [], args.top, lambda s: f"{int(s // 3600)}:{int(s % 3600 // 60):02d}:{int(s % 60):02d} do arquivo",
