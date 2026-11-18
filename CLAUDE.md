@@ -145,6 +145,8 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   fragmentos "-it", legenda posicionada pelo layout (abaixo do gameplay / 70% no split) porque o GTA 6 tem legenda
   própria embaixo, recorte do split desliza para longe da facecam, títulos com palavrão mascarado. Facecam medida:
   cellbit, alanzoka, rakin.
+  Dono pediu (18/11): TODO clipe >= 1 min (monetização). detect.clip 62-95 s, pre_roll 6 s, 2 momentos/segmento,
+  gap 75 s; orchestrator estica momentos curtos para trás antes do render; recut 60-180 s; long_version desligada.
 
 ## Decisões registradas
 - Streamers iniciais por pesquisa (Streams Charts 2025): Coringa (Kick, nº1 em GTA BR), PaulinhoLOKObr, Gaules,
