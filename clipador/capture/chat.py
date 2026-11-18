@@ -210,20 +210,71 @@ class KickChat(ChatRecorder):
                         yield sender, content
 
 
-class YouTubeChat(ChatRecorder):
-    def _iter_messages(self):
-        from chat_downloader import ChatDownloader
+def parse_yt_chat_line(line: str, min_usec: float = 0) -> list[tuple[str | None, str]]:
+    """Uma linha do live_chat.json do yt-dlp -> [(autor, texto)] das mensagens com timestampUsec >= min_usec."""
+    try:
+        obj = json.loads(line)
+    except json.JSONDecodeError:
+        return []
+    out = []
+    for action in (obj.get("replayChatItemAction") or {}).get("actions") or []:
+        r = ((action.get("addChatItemAction") or {}).get("item") or {}).get("liveChatTextMessageRenderer")
+        if not r or float(r.get("timestampUsec") or 0) < min_usec:
+            continue
+        runs = (r.get("message") or {}).get("runs") or []
+        text = "".join(run.get("text") or ((run.get("emoji") or {}).get("shortcuts") or [""])[0] for run in runs).strip()
+        if text:
+            out.append(((r.get("authorName") or {}).get("simpleText"), text))
+    return out
 
-        chat = ChatDownloader().get_chat(self.streamer.url, message_groups=["messages"])
-        self.connected = True
-        log.info("[%s] chat YouTube conectado", self.streamer.handle)
-        for msg in chat:
-            if self.stop_event.is_set():
-                break
-            text = msg.get("message") or ""
-            author = (msg.get("author") or {}).get("name")
-            if text:
-                yield author, text
+
+class YouTubeChat(ChatRecorder):
+    """Chat ao vivo do YouTube pelo yt-dlp (chat-downloader parou de receber mensagens em nov/2026)."""
+
+    def _iter_messages(self):
+        import os
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        from clipador.capture.monitor import ytdlp_cmd
+
+        work = Path(tempfile.mkdtemp(prefix="ytchat_"))
+        min_usec = (time.time() - 10) * 1e6  # o YouTube manda o histórico ao conectar: não é explosão de agora
+        creation = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        proc = subprocess.Popen([*ytdlp_cmd(), "--quiet", "--no-warnings", "--skip-download", "--write-subs", "--sub-langs", "live_chat",
+                                 "-o", str(work / "chat"), self.streamer.url],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creation)
+        part = work / "chat.live_chat.json.part"
+        f = None
+        try:
+            while not self.stop_event.is_set():
+                if f is None:
+                    if part.exists():
+                        f = part.open("r", encoding="utf-8", errors="replace")
+                        self.connected = True
+                        log.info("[%s] chat YouTube conectado (yt-dlp)", self.streamer.handle)
+                    elif proc.poll() is not None:
+                        raise ConnectionError("yt-dlp não abriu o chat (live acabou ou sem chat)")
+                    else:
+                        time.sleep(1)
+                        continue
+                pos = f.tell()
+                line = f.readline()
+                if not line.endswith("\n"):  # nada novo, ou linha ainda sendo escrita
+                    f.seek(pos)
+                    if proc.poll() is not None:
+                        raise ConnectionError("chat do YouTube encerrado")
+                    time.sleep(1)
+                    continue
+                yield from parse_yt_chat_line(line, min_usec)
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+            if f:
+                f.close()
+            shutil.rmtree(work, ignore_errors=True)
 
 
 def make_chat_recorder(db: Database, stream_id: int, streamer: Streamer) -> ChatRecorder:

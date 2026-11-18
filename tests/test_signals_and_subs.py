@@ -64,3 +64,19 @@ def test_build_ass_no_overlap_between_lines_and_merges_hyphen_fragments():
     spans = [(secs(a), secs(b)) for a, b in events]
     assert all(spans[i][1] <= spans[i + 1][0] + 1e-6 for i in range(len(spans) - 1))  # nada se sobrepõe
     assert "-IT" not in ass.replace("POST-IT", "")
+
+
+def test_parse_youtube_live_chat_line_skips_history():
+    import json as _j
+
+    from clipador.capture.chat import parse_yt_chat_line
+
+    def item(ts, text, author="fã"):
+        return {"addChatItemAction": {"item": {"liveChatTextMessageRenderer": {
+            "timestampUsec": str(ts), "authorName": {"simpleText": author},
+            "message": {"runs": [{"text": text}, {"emoji": {"shortcuts": [":fire:"]}}]}}}}}
+
+    line = _j.dumps({"replayChatItemAction": {"actions": [item(1_000, "velha"), item(5_000_000, "KKKK"),
+                                                         {"addBannerToLiveChatCommand": {}}]}})
+    assert parse_yt_chat_line(line, min_usec=2_000_000) == [("fã", "KKKK:fire:")]
+    assert parse_yt_chat_line("{quebrado") == []
