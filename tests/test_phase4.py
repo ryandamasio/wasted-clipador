@@ -163,3 +163,17 @@ def test_tunnel_watchdog_kills_dead_tunnel(tmp_path, monkeypatch):
     monkeypatch.setattr(tmod.httpx, "get", dead)
     t._watchdog(every=0.01, max_fails=3)
     assert killed == [1]
+
+
+def test_review_login_form_sets_cookie(tmp_path, monkeypatch):
+    monkeypatch.setenv("REVIEW_PASSWORD", "segredo")
+    client = TestClient(create_app(load_config(), Database(tmp_path / "t.sqlite")))
+    r = client.get("/")
+    assert r.status_code == 401 and 'name="password"' in r.text
+    assert client.get("/api/stats").status_code == 401
+    assert client.post("/login", data={"password": "errada"}).status_code == 401
+    r = client.post("/login", data={"password": "segredo"}, follow_redirects=False)
+    assert r.status_code == 303 and "wasted_auth" in r.cookies
+    assert client.get("/api/stats").status_code == 200          # cookie guardado pelo cliente
+    basic = TestClient(create_app(load_config(), Database(tmp_path / "t.sqlite")))
+    assert basic.get("/api/stats", auth=("wasted", "segredo")).status_code == 200

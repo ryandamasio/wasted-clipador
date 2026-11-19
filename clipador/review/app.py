@@ -13,15 +13,19 @@
 """
 from __future__ import annotations
 
+import asyncio
 import base64
+import hashlib
+import hmac
 import logging
 import os
 import secrets
 import threading
 from pathlib import Path
+from urllib.parse import parse_qs
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader
 
 from clipador.config import Config
@@ -30,6 +34,14 @@ from clipador.store.db import Database
 
 log = logging.getLogger("review.app")
 TEMPLATES = Path(__file__).parent / "templates"
+LOGIN_HTML = """<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>WASTED</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#1a0f2e;color:#fff;font:16px system-ui,sans-serif}
+form{display:grid;gap:12px;width:min(320px,90vw)}h1{margin:0 0 8px;letter-spacing:.15em;color:#ff4d6d}
+input,button{font:inherit;padding:14px;border-radius:10px;border:0}button{background:#ff4d6d;color:#fff;font-weight:700}
+p{margin:0;color:#ffb3c1}</style></head><body><form method="post" action="/login"><h1>WASTED</h1>
+<input type="password" name="password" placeholder="Senha" autocomplete="current-password" autofocus required>
+<button>Entrar</button><p>{erro}</p></form></body></html>"""
 
 
 def create_app(cfg: Config, db: Database, scheduler=None) -> FastAPI:
@@ -39,12 +51,24 @@ def create_app(cfg: Config, db: Database, scheduler=None) -> FastAPI:
     app.state.service = svc
     password = (os.environ.get("REVIEW_PASSWORD") or "").strip()
 
+    # cookie de login = HMAC da senha: trocar a senha no .env invalida todos os logins
+    token = hmac.new(password.encode(), b"wasted-login", hashlib.sha256).hexdigest() if password else ""
+
     @app.middleware("http")
     async def _basic_auth(request: Request, call_next):
-        """Com REVIEW_PASSWORD no .env, exige usuário 'wasted' + senha (HTTP Basic: o navegador lembra)."""
+        """Com REVIEW_PASSWORD no .env: tela de senha (cookie de 30 dias) ou HTTP Basic (usuário 'wasted')."""
+        if password and request.url.path == "/login" and request.method == "POST":
+            form = parse_qs((await request.body()).decode("utf-8", "replace"))
+            if secrets.compare_digest((form.get("password") or [""])[0].strip(), password):
+                resp = RedirectResponse("/", status_code=303)
+                resp.set_cookie("wasted_auth", token, max_age=30 * 86400, httponly=True, samesite="lax",
+                                secure=request.headers.get("x-forwarded-proto") == "https")
+                return resp
+            await asyncio.sleep(1)  # freia chute de senha
+            return HTMLResponse(LOGIN_HTML.replace("{erro}", "Senha errada."), status_code=401)
         if password:
-            ok = False
-            auth = request.headers.get("authorization", "")
+            ok = secrets.compare_digest(request.cookies.get("wasted_auth", ""), token)
+            auth = "" if ok else request.headers.get("authorization", "")
             if auth.lower().startswith("basic "):
                 try:
                     user, _, pwd = base64.b64decode(auth[6:]).decode("utf-8", "replace").partition(":")
@@ -52,7 +76,10 @@ def create_app(cfg: Config, db: Database, scheduler=None) -> FastAPI:
                 except Exception:  # noqa: BLE001
                     ok = False
             if not ok:
-                return Response("senha necessária", status_code=401, headers={"WWW-Authenticate": 'Basic realm="WASTED"'})
+                if request.url.path == "/":  # navegador embutido (app, WhatsApp) não mostra a caixa do HTTP Basic
+                    return HTMLResponse(LOGIN_HTML.replace("{erro}", ""), status_code=401)
+                return Response("senha necessária", status_code=401, media_type="text/plain; charset=utf-8",
+                                headers={"WWW-Authenticate": 'Basic realm="WASTED"'})
         return await call_next(request)
 
     @app.exception_handler(ReviewError)
