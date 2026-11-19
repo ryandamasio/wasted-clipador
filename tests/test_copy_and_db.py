@@ -18,7 +18,8 @@ def test_generate_copy_has_three_titles_and_all_networks():
     streamer = cfg.streamer("coringa")
     data = generate_copy(cfg, streamer, _moment())
     assert len(data["titles"]) == 3 and len(set(data["titles"])) == 3
-    assert set(data["networks"]) == set(NETWORKS)
+    enabled = {n for n, c in cfg.settings.get("publish.networks").items() if c.get("enabled")}
+    assert set(data["networks"]) == enabled and enabled <= set(NETWORKS)   # só redes ligadas ganham texto
     limits = cfg.hashtags["limits"]
     for net, d in data["networks"].items():
         assert len(d["hashtags"]) <= limits[net]

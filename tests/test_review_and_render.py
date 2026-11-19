@@ -175,8 +175,9 @@ def test_review_api(tmp_path):
     r = client.post(f"/api/clips/{cid}/approve", json={"title": "T2"})
     assert r.status_code == 200 and r.json()["chosen_title"] == "T2"
     assert client.post(f"/api/clips/{cid}/recut", json={"start_delta": -300}).status_code == 400
-    # a aprovação agendou um post por rede habilitada (4, todas manuais na config padrão)
-    assert db.fetchone("SELECT COUNT(*) AS n FROM posts WHERE status='scheduled'")["n"] == 4
+    # a aprovação agendou um post por rede habilitada (todas manuais na config padrão)
+    n_nets = sum(1 for c in cfg.settings.get("publish.networks").values() if c.get("enabled"))
+    assert db.fetchone("SELECT COUNT(*) AS n FROM posts WHERE status='scheduled'")["n"] == n_nets
     r = client.post(f"/api/clips/{cid}/posted", json={"platforms": ["youtube", "tiktok"]})
     assert r.json()["status"] == "posted"
     assert db.fetchone("SELECT COUNT(*) AS n FROM posts WHERE status='posted'")["n"] == 2

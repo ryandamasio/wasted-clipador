@@ -152,7 +152,10 @@ def generate_copy(cfg: Config, streamer: Streamer, moment: dict, llm_title: str 
 
     profile = cfg.settings.get("copy.profile_handle", "@cortesgta6")
     networks: dict[str, dict] = {}
+    net_cfg = cfg.settings.get("publish.networks") or {}
     for i, net in enumerate(NETWORKS):
+        if net_cfg and not (net_cfg.get(net) or {}).get("enabled", False):
+            continue  # rede desligada em publish.networks: sem texto na fila nem no post.md
         tags = _hashtags(cfg, streamer, net, random.Random(moment["id"] * 10 + i))
         title = titles[i % len(titles)]
         desc = DESCRIPTION_TEMPLATE.format(title=title, name=name, link=streamer.channel_link, profile=profile,

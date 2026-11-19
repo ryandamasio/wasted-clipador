@@ -215,7 +215,7 @@ publish:
   networks:                        # via: api (API oficial) | upload-post (serviço único) | manual
     youtube:   {enabled: true, via: api, privacy: public, category_id: "20", made_for_kids: false, set_thumbnail: false}
     tiktok:    {enabled: true, via: api, privacy_level: SELF_ONLY, disable_duet: false, disable_stitch: false, disable_comment: false}
-    instagram: {enabled: true, via: api, share_to_feed: true}
-    kwai:      {enabled: true, via: manual}
+    instagram: {enabled: false, via: api, share_to_feed: true}   # desligado pelo dono em 19/11: só YouTube e TikTok
+    kwai:      {enabled: false, via: manual}                    # desligado pelo dono em 19/11
   upload_post:
     user: ""                       # nome do perfil no painel do Upload-Post (se usar via: upload-post)

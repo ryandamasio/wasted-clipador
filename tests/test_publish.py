@@ -149,6 +149,8 @@ def test_run_due_success_retry_and_fatal(tmp_path):
 
 def test_build_publishers_manual_mode_and_auto(tmp_path, monkeypatch):
     cfg = load_config()
+    for net in ("instagram", "kwai"):  # desligadas na config real desde 19/11; o teste cobre as 4
+        monkeypatch.setitem(cfg.settings._data["publish"]["networks"][net], "enabled", True)
     pubs = build_publishers(cfg)
     assert set(pubs) == {"youtube", "tiktok", "instagram", "kwai"} and all(p.manual for p in pubs.values())
     monkeypatch.setitem(cfg.settings._data["publish"], "mode", "auto")
