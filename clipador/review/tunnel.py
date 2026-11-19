@@ -14,6 +14,8 @@ import threading
 import time
 from pathlib import Path
 
+import httpx
+
 log = logging.getLogger("review.tunnel")
 CANDIDATES = [r"C:\Program Files (x86)\cloudflared\cloudflared.exe", r"C:\Program Files\cloudflared\cloudflared.exe"]
 URL_RE = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
@@ -44,6 +46,7 @@ class Tunnel(threading.Thread):
         if not exe:
             log.error("cloudflared não encontrado: `winget install Cloudflare.cloudflared`")
             return
+        threading.Thread(target=self._watchdog, name="tunnel-watchdog", daemon=True).start()
         while not self.stop_event.is_set():
             creation = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             self.proc = subprocess.Popen([exe, "tunnel", "--no-autoupdate", "--url", f"http://localhost:{self.port}"],
@@ -67,6 +70,25 @@ class Tunnel(threading.Thread):
             self.url = None
             self.url_file.unlink(missing_ok=True)
             self.stop_event.wait(20)
+
+    def _watchdog(self, every: float = 300, max_fails: int = 3) -> None:
+        # quick tunnel às vezes morre do lado da Cloudflare com o cloudflared ainda vivo (18/11: link deu 000 por horas);
+        # derrubar o processo faz o laço do run() abrir um túnel novo
+        fails = 0
+        while not self.stop_event.wait(every):
+            url = self.url
+            if not url:
+                fails = 0
+                continue
+            try:
+                ok = httpx.get(url, timeout=20).status_code < 500   # 401 (pede senha) = vivo
+            except httpx.HTTPError:
+                ok = False
+            fails = 0 if ok else fails + 1
+            if fails >= max_fails:
+                log.warning("túnel %s não responde há %d checagens; reabrindo", url, fails)
+                fails = 0
+                self._kill()
 
     def _kill(self) -> None:
         if self.proc and self.proc.poll() is None:

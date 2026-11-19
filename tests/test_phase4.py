@@ -148,3 +148,18 @@ def test_screen_capture_commands(tmp_path):
     cap["plan_b"]["audio_device"] = ""
     assert "dshow" not in " ".join(rec._screen_ffmpeg_cmd(tmp_path / "run"))
     db.close()
+
+
+def test_tunnel_watchdog_kills_dead_tunnel(tmp_path, monkeypatch):
+    import httpx
+    from clipador.review import tunnel as tmod
+
+    t = tmod.Tunnel(8787, tmp_path / "u.txt")
+    t.url = "https://x.trycloudflare.com"
+    killed = []
+    monkeypatch.setattr(t, "_kill", lambda: (killed.append(1), t.stop_event.set()))
+    def dead(*a, **k):
+        raise httpx.ConnectError("gone")
+    monkeypatch.setattr(tmod.httpx, "get", dead)
+    t._watchdog(every=0.01, max_fails=3)
+    assert killed == [1]
