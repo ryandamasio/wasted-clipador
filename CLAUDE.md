@@ -172,3 +172,7 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   bloqueada por Cloudflare: detecção segue sem chat (pesos renormalizam).
 - Sem LLM por padrão (sem chave); postagem manual no MVP; contas de redes ainda não criadas.
 - GTA 6 lança em 19/11/2026.
+  18/11 (23h): túnel com watchdog (checa a URL a cada 5 min; 3 falhas = reabre: quick tunnel morria com o cloudflared
+  vivo). Fila com tela de senha + cookie de 30 dias (navegador do app/WhatsApp não mostra a caixa do HTTP Basic, que
+  continua aceito). Conta do TikTok renomeada pelo dono: @cortes.gta6_ (copy.profile_handle; textos da fila trocados).
+  Reinício após queda de internet levou 2,5 min entre "Clipador iniciado" e a fila subir (causa não achada).
