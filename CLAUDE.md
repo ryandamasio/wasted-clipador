@@ -177,3 +177,7 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   continua aceito). Conta do TikTok renomeada pelo dono: @cortes.gta6_ (copy.profile_handle; textos da fila trocados).
   19/11: dono desligou Instagram e Kwai (publish.networks.*.enabled false): só YouTube e TikTok; textos de post só
   para redes ligadas. Reinício após queda de internet levou 2,5 min entre "Clipador iniciado" e a fila subir (causa não achada).
+  19/11 (00h, jogo lançou no BR): textos por plataforma (YouTube: título com "GTA 6", descrição com palavra-chave +
+  pergunta + crédito + #GTA6 #Shorts #streamer, tags p/ o Studio; TikTok: legenda única com gancho, pergunta, crédito e
+  5 hashtags). Fila mostra "Textos prontos para postar" com botão Copiar por campo e "Já postei" (postagem manual sem
+  Agenda); "Aprovar" virou "Agendar". Para regerar textos da fila: generate_copy + write_post_files por clipe.
