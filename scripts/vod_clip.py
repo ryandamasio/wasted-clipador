@@ -37,7 +37,8 @@ def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
     ap.add_argument("--streamer", required=True)
-    ap.add_argument("--vod", required=True, help="id do VOD da Twitch")
+    ap.add_argument("--vod", required=True, help="id do VOD da Twitch ou do vídeo do YouTube")
+    ap.add_argument("--platform", default="twitch", choices=["twitch", "youtube"])
     ap.add_argument("--words", required=True)
     ap.add_argument("--words-offset", default="0:00:00")
     ap.add_argument("--at", required=True, help="posição no VOD (H:MM:SS) perto da frase")
@@ -70,18 +71,30 @@ def main() -> int:
         print(f"AVISO: o corte começa {peak - start:.0f}s antes da frase-chave; o gancho precisa estar nos primeiros 3 s")
 
     # baixa só o trecho (com folga de 3 s) na melhor qualidade
-    url = subprocess.run([*ytdlp_cmd(), "--no-warnings", "-g", "-f", args.quality, f"https://www.twitch.tv/videos/{args.vod}"],
-                         capture_output=True, text=True).stdout.strip().splitlines()[-1]
+    vod_url = (f"https://www.youtube.com/watch?v={args.vod}" if args.platform == "youtube"
+               else f"https://www.twitch.tv/videos/{args.vod}")
     out_dir = cfg.settings.path("recordings_dir") / f"{args.streamer}_vod{args.vod}"
     out_dir.mkdir(parents=True, exist_ok=True)
     a, b = max(0.0, start - 3), end + 3
     seg_path = out_dir / f"vod_{int(a)}_{int(b)}.ts"
-    if not seg_path.exists():
+    if not seg_path.exists() and args.platform == "youtube":
+        # YouTube: vídeo e áudio vêm em HLS separados (1080p60 H.264 + áudio); -ss no m3u8 baixa só o trecho, rápido
+        r = subprocess.run([*ytdlp_cmd(), "--no-warnings", "-g", "-f", "312+234/311+234", vod_url], capture_output=True, text=True)
+        urls = r.stdout.strip().splitlines()
+        if len(urls) < 2:
+            # "Sign in to confirm you're not a bot": bloqueio temporário do IP; não usamos login/cookies do dono
+            print("yt-dlp não devolveu o vídeo:", (r.stderr.strip().splitlines() or ["?"])[-1]); return 3
+        v_url, a_url = urls[-2:]
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{a:.2f}", "-i", v_url, "-ss", f"{a:.2f}", "-i", a_url,
+                        "-t", f"{b - a:.2f}", "-map", "0:v", "-map", "1:a", "-c", "copy", "-f", "mpegts", str(seg_path)], check=True)
+    elif not seg_path.exists():
+        url = subprocess.run([*ytdlp_cmd(), "--no-warnings", "-g", "-f", args.quality, vod_url],
+                             capture_output=True, text=True).stdout.strip().splitlines()[-1]
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{a:.2f}", "-i", url, "-t", f"{b - a:.2f}",
                         "-c", "copy", "-f", "mpegts", str(seg_path)], check=True)
 
     vod_epoch = datetime.strptime(args.vod_start, "%Y-%m-%d %H:%M:%S").timestamp()
-    stream_id = db.create_stream(args.streamer, "twitch", f"https://www.twitch.tv/videos/{args.vod}", out_dir, title=f"VOD {args.vod} (GTA 6)")
+    stream_id = db.create_stream(args.streamer, args.platform, vod_url, out_dir, title=f"VOD {args.vod} (GTA 6)")
     db.end_stream(stream_id, "ended")
     seg_id = db.add_segment(stream_id, 0, seg_path, vod_epoch + a, vod_epoch + b)
     db.update("segments", seg_id, status="detected")

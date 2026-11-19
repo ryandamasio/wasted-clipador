@@ -160,6 +160,10 @@ Saída: `data/output/AAAA-MM-DD/<handle>_<HHMMSS>_m<id>/{clip.mp4, clip_youtube.
   BUGS sérios corrigidos: reinício deixava 94 ffmpeg/streamlink órfãos (agora job object, clipador/procjob.py) e um
   ffmpeg órfão corrompeu um clipe (render agora grava em temp e troca). Para reiniciar: taskkill /T no `clipador run`.
   VOD do Cellbit é só para inscritos (sem login). Download de VOD: ffmpeg -ss no m3u8 (yt-dlp -g) é o mais rápido.
+  18/11 (noite): manhã do Davy curada do VOD do YouTube (x50ONQrBPRM, começou 06:31:29): `vod_clip.py --platform youtube`
+  usa os formatos HLS 312 (1080p60 H.264) + 234 (áudio) com ffmpeg -ss (o --download-sections em DASH é lentíssimo).
+  Áudio para o scan: formato 233 (HLS) baixa 3,5 h em ~3 min. Muitas chamadas seguidas ao yt-dlp geram "Sign in to
+  confirm you're not a bot" para o IP inteiro (durou ~80 min); não usar cookies do dono, só esperar.
 
 ## Decisões registradas
 - Streamers iniciais por pesquisa (Streams Charts 2025): Coringa (Kick, nº1 em GTA BR), PaulinhoLOKObr, Gaules,
