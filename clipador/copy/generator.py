@@ -106,6 +106,55 @@ def _hashtags(cfg: Config, streamer: Streamer, network: str, rng: random.Random)
     return ["#" + t for t in seen[:limit]]
 
 
+# pergunta no fim do texto puxa comentário (sinal forte nas duas plataformas); servem para qualquer corte de GTA 6
+QUESTIONS = [
+    "Você reagiria igual? 👇",
+    "O GTA 6 tá valendo a espera? Comenta aí 👇",
+    "Nota de 0 a 10 pra esse momento? 👇",
+    "Qual foi a sua reação no GTA 6? 👇",
+    "Já aconteceu isso com você no jogo? 👇",
+]
+
+
+def _streamer_tag(cfg: Config, streamer: Streamer) -> str:
+    own = (cfg.hashtags.get("streamers") or {}).get(streamer.handle) or [streamer.handle]
+    return own[0]
+
+
+def _with_gta(title: str, limit: int) -> str:
+    """Título sem 'GTA' perde a busca do lançamento; acrescenta no fim se couber."""
+    if "gta" in title.lower():
+        return title[:limit]
+    longer = f"{title} no GTA 6"
+    return longer if len(longer) <= limit else title[:limit]
+
+
+def _youtube_copy(cfg: Config, streamer: Streamer, main: str, question: str, music: dict | None) -> dict:
+    """Shorts: título curto com 'GTA 6' (aparece cortado no feed), descrição com palavra-chave + crédito + 3 hashtags
+    (as 3 primeiras aparecem acima do título), tags separadas para o campo 'Tags' do YouTube Studio no PC."""
+    name, st = streamer.name, _streamer_tag(cfg, streamer)
+    title = _with_gta(main, 100)
+    hashtags = ["#GTA6", "#Shorts", f"#{st}"]
+    lines = [f"{main}. Corte da live do {name} jogando GTA 6 (GTA VI).", "", question, "",
+             f"🎮 Live completa: {name} — {streamer.channel_link}",
+             "🔔 Inscreva-se para ver os melhores momentos de GTA 6 todo dia."]
+    if music and music.get("attribution"):
+        lines += ["", f"Música: {music['attribution']}"]
+    lines += ["", " ".join(hashtags)]
+    tags = ["gta 6", "gta vi", "gta 6 gameplay", "gta 6 brasil", "gta 6 reação", "cortes gta 6", "gta 6 pt br",
+            name.lower(), f"cortes {name.lower()}", f"{name.lower()} gta 6"]
+    return {"title": title, "description": "\n".join(lines), "hashtags": hashtags, "tags": ", ".join(dict.fromkeys(tags))}
+
+
+def _tiktok_copy(cfg: Config, streamer: Streamer, main: str, question: str) -> dict:
+    """TikTok só tem a legenda: gancho com as palavras que o povo busca (GTA 6), pergunta, crédito e 5 hashtags."""
+    name, st = streamer.name, _streamer_tag(cfg, streamer)
+    hook = _with_gta(main, 150)
+    hashtags = ["#gta6", "#gtavi", "#gta6brasil", f"#{st}", "#cortesgta6"]
+    caption = f"{hook}\n\n{question}\n\n🎥 Live do {name}\n\n{' '.join(hashtags)}"
+    return {"title": hook, "description": caption, "hashtags": hashtags}
+
+
 def music_note(music: dict | None) -> str:
     if music:
         lic = f" — {music['license']}" if music.get("license") else ""
@@ -153,20 +202,21 @@ def generate_copy(cfg: Config, streamer: Streamer, moment: dict, llm_title: str 
     profile = cfg.settings.get("copy.profile_handle", "@cortesgta6")
     networks: dict[str, dict] = {}
     net_cfg = cfg.settings.get("publish.networks") or {}
+    main = censor(titles[0]) if titles else f"{name} no GTA 6"
+    question = rng.choice(QUESTIONS)
     for i, net in enumerate(NETWORKS):
         if net_cfg and not (net_cfg.get(net) or {}).get("enabled", False):
             continue  # rede desligada em publish.networks: sem texto na fila nem no post.md
-        tags = _hashtags(cfg, streamer, net, random.Random(moment["id"] * 10 + i))
-        title = titles[i % len(titles)]
-        desc = DESCRIPTION_TEMPLATE.format(title=title, name=name, link=streamer.channel_link, profile=profile,
-                                           hashtags=" ".join(tags))
         if net == "youtube":
-            title_net = f"{title} #shorts"[:100]
-            if music and music.get("attribution"):
-                desc = desc.replace("\n\n#", f"\n\nMúsica: {music['attribution']}\n\n#", 1)
+            networks[net] = _youtube_copy(cfg, streamer, main, question, music)
+        elif net == "tiktok":
+            networks[net] = _tiktok_copy(cfg, streamer, main, question)
         else:
-            title_net = title
-        networks[net] = {"title": title_net, "description": desc, "hashtags": tags}
+            tags = _hashtags(cfg, streamer, net, random.Random(moment["id"] * 10 + i))
+            title = titles[i % len(titles)]
+            desc = DESCRIPTION_TEMPLATE.format(title=title, name=name, link=streamer.channel_link, profile=profile,
+                                               hashtags=" ".join(tags))
+            networks[net] = {"title": title, "description": desc, "hashtags": tags}
     return {
         "titles": titles,
         "credit": f"Clipe de {name} — {streamer.channel_link}",
@@ -190,6 +240,8 @@ def write_post_files(out_dir: Path, copy_data: dict, moment: dict, streamer: Str
           "## Títulos (escolha um)", *[f"{i + 1}. {t}" for i, t in enumerate(copy_data["titles"])], ""]
     for net, data in copy_data["networks"].items():
         md += [f"## {net.capitalize()}", "", f"**Título:** {data['title']}", "", "```", data["description"], "```", ""]
+        if data.get("tags"):
+            md += [f"**Tags:** {data['tags']}", ""]
     md += ["## Música", copy_data["music_note"], ""]
     if copy_data.get("long_version"):
         lvd = copy_data["long_version"]

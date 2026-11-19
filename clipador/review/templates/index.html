@@ -76,6 +76,11 @@
   .net { border-top:1px solid var(--line); padding:10px 0; }
   .net h4 { margin:0 0 6px; font:500 14px/1 var(--body); display:flex; justify-content:space-between; align-items:center; }
   .net h4 button { font-size:12px; padding:6px 10px; background:var(--dusk); }
+  .fld { margin:8px 0 12px; }
+  .fld .fh { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:5px; font-size:13px; color:var(--mute); }
+  .fld .fh button { font-size:14px; font-weight:600; padding:9px 16px; min-width:96px; background:var(--sun2); color:#120E24; border-radius:10px; }
+  .fld .fh button.done { background:#7CF2E4; }
+  .fld textarea.short { min-height:0; }
   .links { display:flex; gap:14px; flex-wrap:wrap; font-size:13px; padding:8px 0 4px; }
   .note { color:var(--mute); font-size:13px; padding:4px 0 8px; }
   .acts { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:10px 14px 14px; }
@@ -162,6 +167,12 @@
 <script>
 const REJECT = {{ reject_reasons | tojson }};
 const NETS = { youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", kwai: "Kwai" };
+// o que cada app pede na hora de postar: [campo, rótulo, linhas]
+const FIELDS = {
+  youtube: [["title", "Título", 2], ["description", "Descrição", 8], ["tags", "Tags (só no PC: YouTube Studio > Mais opções)", 3]],
+  tiktok: [["description", "Legenda (é o único campo do TikTok)", 8]],
+  other: [["title", "Título", 2], ["description", "Descrição", 8]],
+};
 const COMP_NAMES = { chat: "chat", audio: "áudio", transcript: "fala", keywords: "GTA" };
 let status = "ready", histStatus = "approved", clips = [], posts = [], publishInfo = {}, busy = false, lastStats = {};
 
@@ -204,12 +215,14 @@ function card(c) {
   const ready = c.status === "ready";
   const titles = c.titles.map((t, i) => `<label><input type="radio" name="t${c.id}" value="${i}" ${t === c.chosen_title ? "checked" : ""}><input type="text" data-i="${i}" value="${esc(t)}"></label>`).join("");
   const nets = Object.entries(c.networks).map(([n, d]) => `
-    <div class="net" data-net="${n}"><h4>${NETS[n] || n}<button class="ghost" data-copy="${n}">copiar</button></h4>
-      <input type="text" class="nt" value="${esc(d.title)}" style="margin-bottom:6px">
-      <textarea class="nd">${esc(d.description)}</textarea></div>`).join("");
+    <div class="net" data-net="${n}"><h4><span class="net-tag net-${n}">${NETS[n] || n}</span></h4>
+      ${(FIELDS[n] || FIELDS.other).filter(([k]) => d[k]).map(([k, label, rows]) => `
+        <div class="fld"><div class="fh"><span>${label}</span><button data-copyf="${k}" data-label="${esc(label)} (${NETS[n] || n})">Copiar</button></div>
+        <textarea class="f-${k}${rows <= 2 ? " short" : ""}" rows="${rows}">${esc(d[k])}</textarea></div>`).join("")}</div>`).join("");
   const comps = Object.entries(c.components).filter(([, v]) => v != null).map(([k, v]) => (COMP_NAMES[k] || k) + " " + Math.round(v * 100) + "%").join(" ");
   const acts = ready ? `
-      <button class="ok" data-a="approve">Aprovar</button>
+      <button class="ok" data-a="posted">Já postei</button>
+      <button class="ghost" data-a="approve">Agendar</button>
       <button class="no" data-a="reject">Rejeitar</button>
       <button class="ghost" data-a="recut-panel" ${c.media_available ? "" : "disabled title='gravação bruta já apagada'"}>Ajustar corte</button>
       <button class="ghost" data-a="reedit" ${c.media_available ? "" : "disabled"}>Gerar outra versão</button>`
@@ -227,9 +240,9 @@ function card(c) {
     <div class="body">
       <div class="wanted"><div class="stars" title="nota ${c.score}">${stars(c.score)}</div><div class="score">${c.score}<small>/100</small></div></div>
       <div class="why">${c.notes.map(n => `<span>${esc(n)}</span>`).join("")}<span class="dim">${esc(comps)}${c.render.zoom && c.render.zoom.length ? ` · zoom ×${c.render.zoom.length}` : ""} · ${layout}</span></div>
+      <details open class="topost"><summary>Textos prontos para postar</summary>${nets}</details>
       <details><summary>O que ele disse</summary><pre>${esc(c.transcript || "(sem fala)")}</pre></details>
-      ${ready ? `<details open><summary>Título</summary><div class="titles">${titles}</div></details>` : `<details><summary>Título escolhido</summary><pre>${esc(c.chosen_title)}</pre></details>`}
-      <details><summary>Textos por rede (${Object.keys(c.networks).length})</summary>${nets}</details>
+      ${ready ? `<details><summary>Outros títulos (para aprovar)</summary><div class="titles">${titles}</div></details>` : `<details><summary>Título escolhido</summary><pre>${esc(c.chosen_title)}</pre></details>`}
       <div class="links"><a href="/media/${c.id}/clip.mp4" download>Baixar clip.mp4</a>${c.has_music_video ? `<a href="/media/${c.id}/clip_youtube.mp4" download>Versão YouTube (com música)</a>` : ""}${c.has_long_video ? `<a href="/media/${c.id}/clip_long.mp4" download>Versão longa p/ TikTok (${c.long_seconds || "+60"} s)</a>` : ""}</div>
       <div class="note">${esc(c.music_note || "")}</div>
     </div>
@@ -264,7 +277,7 @@ function collect(art) {
   const idx = sel ? sel.value : 0;
   const title = (art.querySelector(`.titles input[type=text][data-i="${idx}"]`) || {}).value;
   const networks = {};
-  art.querySelectorAll(".net").forEach(n => { networks[n.dataset.net] = { title: $(".nt", n).value, description: $(".nd", n).value }; });
+  art.querySelectorAll(".net").forEach(n => { networks[n.dataset.net] = { title: ($(".f-title", n) || {}).value, description: ($(".f-description", n) || {}).value }; });
   return { title, networks };
 }
 
@@ -370,6 +383,15 @@ $("#list").addEventListener("click", async ev => {
     finally { busy = false; }
     return;
   }
+  if (btn.dataset.copyf) {
+    const ta = btn.closest(".fld").querySelector("textarea");
+    let ok = false;
+    try { await navigator.clipboard.writeText(ta.value); ok = true; }
+    catch { ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length); try { ok = document.execCommand("copy"); } catch {} }
+    if (ok) { btn.textContent = "Copiado ✓"; btn.classList.add("done"); setTimeout(() => { btn.textContent = "Copiar"; btn.classList.remove("done"); }, 1800); toast("Copiado: " + btn.dataset.label); }
+    else toast("Selecionei o texto: segure e escolha Copiar");
+    return;
+  }
   if (btn.dataset.copy) {
     const n = art.querySelector(`.net[data-net="${btn.dataset.copy}"]`);
     try { await navigator.clipboard.writeText($(".nt", n).value + "\n\n" + $(".nd", n).value); toast("Copiado: " + NETS[btn.dataset.copy]); } catch { toast("Não deu para copiar aqui (abra em localhost ou HTTPS)"); }
@@ -392,7 +414,7 @@ $("#list").addEventListener("click", async ev => {
     else if (a === "reedit") { await api(`/api/clips/${id}/reedit`); removeCard(art, "Gerando outra versão"); }
     else if (a === "recut-go") { await api(`/api/clips/${id}/recut`, { start_delta: parseFloat($(".sv", art).dataset.v || 0), end_delta: parseFloat($(".ev", art).dataset.v || 0) }); removeCard(art, "Recortando"); }
     else if (a === "restore") { await api(`/api/clips/${id}/restore`); removeCard(art, "De volta à fila"); }
-    else if (a === "posted") { await api(`/api/clips/${id}/posted`, { platforms: ["manual"] }); removeCard(art, "Marcado como postado"); }
+    else if (a === "posted") { await api(`/api/clips/${id}/posted`, { platforms: [...art.querySelectorAll(".net")].map(n => n.dataset.net) }); removeCard(art, "Marcado como postado"); }
   } catch (e) { toast("Erro: " + e.message, 4000); btn.disabled = false; }
   finally { busy = false; }
 });

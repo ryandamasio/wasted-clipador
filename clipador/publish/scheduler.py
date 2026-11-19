@@ -157,8 +157,6 @@ class Scheduler:
                 continue
             data = nets.get(net) or {}
             title = (clip.get("chosen_title") or clip.get("title") or (copy_data.get("titles") or [""])[0]).strip()
-            if net == "youtube" and "#shorts" not in title.lower():
-                title = f"{title} #shorts"[:100]
             caption = data.get("description") or f"{title}\n\n{copy_data.get('credit', '')}"
             pub = self.publishers[net]
             publisher_kind = "manual" if pub.manual else ("upload-post" if pub.__class__.__name__ == "UploadPostPublisher" else "api")

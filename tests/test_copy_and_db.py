@@ -23,9 +23,12 @@ def test_generate_copy_has_three_titles_and_all_networks():
     limits = cfg.hashtags["limits"]
     for net, d in data["networks"].items():
         assert len(d["hashtags"]) <= limits[net]
-        assert d["hashtags"][0] == "#gta6"
-        assert streamer.channel_link in d["description"]
-    assert data["networks"]["youtube"]["title"].endswith("#shorts")
+        assert d["hashtags"][0].lower() == "#gta6"
+    yt, tt = data["networks"]["youtube"], data["networks"]["tiktok"]
+    assert streamer.channel_link in yt["description"]   # link no TikTok não é clicável: lá vai só o nome
+    assert "gta" in yt["title"].lower() and len(yt["title"]) <= 100 and "#Shorts" in yt["description"]
+    assert yt["tags"].startswith("gta 6") and len(yt["tags"]) <= 500
+    assert "#gta6" in tt["description"] and "👇" in tt["description"] and "Coringa" in tt["description"]
     assert "Clipe de Coringa" in data["credit"]
 
 

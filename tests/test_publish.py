@@ -111,7 +111,7 @@ def test_schedule_clip_staggers_networks_and_skips_existing(tmp_path):
     posts = db.posts_for_clip(ids[0])
     assert len(created) == 2 and {p["platform"] for p in posts} == {"youtube", "tiktok"}
     yt = next(p for p in posts if p["platform"] == "youtube"); tt = next(p for p in posts if p["platform"] == "tiktok")
-    assert yt["title"].endswith("#shorts") and tt["title"] == "T1"
+    assert yt["title"] == "T1" and tt["title"] == "T1"   # #Shorts vai na descrição
     assert 3 * 60 <= yt["scheduled_at"] - now <= 12 * 60             # jitter
     assert 8 * 60 <= tt["scheduled_at"] - yt["scheduled_at"] <= 35 * 60   # defasagem entre redes
     assert sch.schedule_clip(ids[0], now=now) == []                   # idempotente
@@ -177,7 +177,7 @@ def test_review_approve_schedules_and_posts_api(tmp_path):
     j = client.get("/api/posts").json()
     assert len(j["posts"]) == 2 and j["publish"]["networks"]["youtube"]["manual"] is True
     yt = next(p for p in j["posts"] if p["platform"] == "youtube"); tt = next(p for p in j["posts"] if p["platform"] == "tiktok")
-    assert yt["publisher"] == "manual" and yt["title"] == "Meu título #shorts"
+    assert yt["publisher"] == "manual" and yt["title"] == "Meu título"
     # dono postou o do YouTube à mão
     r = client.post(f"/api/posts/{yt['id']}/posted", json={"url": "https://youtube.com/shorts/abc"})
     assert r.status_code == 200 and db.get_post(yt["id"])["url"].endswith("abc")
